@@ -1,0 +1,79 @@
+name: Bug report
+description: Report a defect in OAS Atlas
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. Please fill in as much as you can.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I run ..., I see ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: I expected ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands or code, minimized.
+      placeholder: |
+        1. oas-atlas demo
+        2. oas-atlas search "..."
+        3. See error
+      render: bash
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: oas-atlas version
+      description: Output of `pip show oas-atlas | head -2`
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - pip install (PyPI)
+        - pip install -e . (source)
+        - Docker / docker compose
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 14.5 / Ubuntu 24.04 / Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace
+      render: text
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `oas-atlas doctor`
+      render: json

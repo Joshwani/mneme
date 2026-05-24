@@ -1,0 +1,114 @@
+"""Environment diagnostics for OAS Atlas."""
+
+from __future__ import annotations
+
+import importlib
+import importlib.metadata
+import os
+import platform
+import shutil
+import sys
+from pathlib import Path
+from typing import Any
+
+from oas_atlas.index.db import AtlasDB, default_db_path
+
+
+def _module_info(module_name: str, distribution: str | None = None) -> dict[str, Any]:
+    info: dict[str, Any] = {"installed": False, "version": None}
+    try:
+        importlib.import_module(module_name)
+        info["installed"] = True
+    except Exception:
+        info["installed"] = False
+    try:
+        info["version"] = importlib.metadata.version(distribution or module_name)
+    except importlib.metadata.PackageNotFoundError:
+        pass
+    except Exception:
+        pass
+    return info
+
+
+def _network_check() -> dict[str, Any]:
+    """Best-effort, no-side-effect check that outbound HTTPS reaches a stable host."""
+
+    try:
+        import httpx
+    except Exception as exc:
+        return {"ok": False, "error": f"httpx not importable: {exc}"}
+
+    url = "https://api.apis.guru/v2/list.json"
+    try:
+        with httpx.Client(timeout=4.0, follow_redirects=True) as client:
+            response = client.head(url)
+        return {
+            "ok": response.status_code < 500,
+            "checked": url,
+            "status": response.status_code,
+        }
+    except Exception as exc:
+        return {"ok": False, "checked": url, "error": str(exc)}
+
+
+def collect(db_path: str | None = None) -> dict[str, Any]:
+    """Collect a dict of diagnostics. Safe to call without a DB."""
+
+    resolved_db = db_path or default_db_path()
+    db_file = Path(resolved_db).expanduser()
+    db_exists = db_file.exists()
+    db_size = db_file.stat().st_size if db_exists else None
+
+    stats: dict[str, Any] = {}
+    db_open_error: str | None = None
+    if db_exists:
+        try:
+            db = AtlasDB(resolved_db)
+            try:
+                stats = db.stats()
+            finally:
+                db.close()
+        except Exception as exc:
+            db_open_error = str(exc)
+
+    return {
+        "oas_atlas": _module_info("oas_atlas", "oas-atlas"),
+        "python": {
+            "version": platform.python_version(),
+            "executable": sys.executable,
+            "implementation": platform.python_implementation(),
+        },
+        "platform": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+        },
+        "cli_on_path": shutil.which("oas-atlas") or None,
+        "env": {
+            "OAS_ATLAS_DB": os.environ.get("OAS_ATLAS_DB"),
+            "OAS_ATLAS_AUTH_CONFIG": os.environ.get("OAS_ATLAS_AUTH_CONFIG"),
+            "OAS_ATLAS_HTTP_ALLOW_HOSTS": os.environ.get("OAS_ATLAS_HTTP_ALLOW_HOSTS"),
+            "XDG_DATA_HOME": os.environ.get("XDG_DATA_HOME"),
+        },
+        "db": {
+            "path": str(db_file),
+            "exists": db_exists,
+            "size_bytes": db_size,
+            "stats": stats,
+            "open_error": db_open_error,
+        },
+        "extras": {
+            "mcp": _module_info("mcp"),
+            "fastapi": _module_info("fastapi"),
+            "uvicorn": _module_info("uvicorn"),
+            "httpx": _module_info("httpx"),
+            "pydantic": _module_info("pydantic"),
+            "yaml": _module_info("yaml", "PyYAML"),
+            "bs4": _module_info("bs4", "beautifulsoup4"),
+        },
+        "dev_tools": {
+            "ruff": shutil.which("ruff") or None,
+            "pytest": shutil.which("pytest") or None,
+        },
+        "network": _network_check(),
+    }

@@ -1,0 +1,97 @@
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install build tooling
+        run: python -m pip install --upgrade build
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(python -c "import tomllib; print(tomllib.loads(open('pyproject.toml','rb').read().decode())['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build sdist and wheel
+        run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  demo-index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install oas-atlas
+        run: python -m pip install -e .
+      - name: Build a small demo index
+        run: |
+          mkdir -p artifacts
+          oas-atlas --db artifacts/oas_atlas.demo.db add-file examples/specs/todo.yaml
+          # Pull a small handful of popular specs; tolerate individual failures.
+          oas-atlas --db artifacts/oas_atlas.demo.db crawl-seeds examples/seeds.popular.txt || true
+          oas-atlas --db artifacts/oas_atlas.demo.db stats > artifacts/stats.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-index
+          path: artifacts/
+
+  publish-pypi:
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/oas-atlas
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publish to PyPI (Trusted Publisher / OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: [build, demo-index]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: demo-index
+          path: artifacts
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*
+            artifacts/oas_atlas.demo.db
+            artifacts/stats.json

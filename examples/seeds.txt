@@ -1,0 +1,6 @@
+# Domains or direct OpenAPI URLs. Direct URLs are indexed; domains are discovered first.
+# Direct spec URL example:
+# https://raw.githubusercontent.com/OAI/OpenAPI-Specification/main/examples/v3.0/petstore.yaml
+
+# Domain example:
+# api.github.com

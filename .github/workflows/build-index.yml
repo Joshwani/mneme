@@ -1,0 +1,33 @@
+name: build-demo-index
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '21 3 * * 1'
+
+jobs:
+  demo-index-snapshot:
+    name: Demo index snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e .
+      - name: Build small demo index
+        run: |
+          mkdir -p data
+          oas-atlas --db data/oas_atlas.db add-file examples/specs/todo.yaml
+          # For a larger public demo index, uncomment this. The default limit is intentionally small.
+          # oas-atlas --db data/oas_atlas.db ingest-apis-guru --limit 25
+          oas-atlas --db data/oas_atlas.db stats
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oas-atlas-demo-index
+          path: data/oas_atlas.db

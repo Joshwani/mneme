@@ -1,0 +1,48 @@
+# Curated public OpenAPI documents for popular developer APIs.
+# Lines starting with "#" are comments. Lines may be either:
+#   - a direct spec URL (https://...), or
+#   - a domain (api.example.com) which will be discovered.
+#
+# Use:
+#   oas-atlas crawl-seeds examples/seeds.popular.txt
+#
+# Provenance notes:
+#   - APIs.guru: https://apis.guru/ aggregates many public OpenAPI specs.
+#   - Upstream URLs are preferred when the API vendor publishes one.
+#
+# Want to add an API? Open an issue using the "Add a public API to the
+# starter index" template.
+
+# --- Reference: OpenAPI sample ---
+https://raw.githubusercontent.com/OAI/OpenAPI-Specification/main/examples/v3.0/petstore.yaml
+
+# --- GitHub REST API (large; upstream-published) ---
+https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+
+# --- Stripe (upstream-published) ---
+https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+
+# --- Slack Web API (upstream-published) ---
+https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+
+# --- DigitalOcean (upstream-published) ---
+https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml
+
+# --- Twilio (upstream-published, Messaging) ---
+https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/yaml/twilio_messaging_v1.yaml
+
+# --- Discord (community-maintained, via APIs.guru) ---
+https://api.apis.guru/v2/specs/discord.com/10/openapi.yaml
+
+# --- Notion (community-maintained, via APIs.guru) ---
+https://api.apis.guru/v2/specs/notion.com/1.0.0/openapi.yaml
+
+# --- Linear (community-maintained, via APIs.guru) ---
+# Linear's primary API is GraphQL; an OpenAPI variant may not exist. Left as a
+# placeholder until an upstream spec is published.
+
+# --- OpenAI (no official OpenAPI; check before enabling) ---
+# https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
+
+# --- Anthropic (no public OpenAPI as of writing) ---
+# Add here when published.

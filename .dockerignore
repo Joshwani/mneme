@@ -1,0 +1,51 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# CI and project meta
+.github/
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+
+# Python build/test
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Tests are not needed in the runtime image
+tests/
+
+# Local data + secrets
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+auth.json
+auth.local.json
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+services:
+  oas-atlas:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      OAS_ATLAS_DB: /data/oas_atlas.db
+    ports:
+      - "8080:8080"
+    volumes:
+      - oas_atlas_data:/data
+      - ../examples:/examples:ro
+    restart: unless-stopped
+
+volumes:
+  oas_atlas_data:

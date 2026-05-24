@@ -1,0 +1,57 @@
+name: Add a public API to the starter index
+description: Suggest a public OpenAPI document for the curated seed list
+title: "spec: add "
+labels: ["seeds"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to suggest a public, upstream-maintained OpenAPI document for inclusion in `examples/seeds.popular.txt`.
+  - type: input
+    id: api-name
+    attributes:
+      label: API name
+      placeholder: Stripe
+    validations:
+      required: true
+  - type: input
+    id: spec-url
+    attributes:
+      label: OpenAPI spec URL
+      description: A stable, publicly fetchable URL. Prefer the upstream-published location; APIs.guru is acceptable.
+      placeholder: https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+    validations:
+      required: true
+  - type: input
+    id: homepage
+    attributes:
+      label: API homepage
+      placeholder: https://stripe.com/docs/api
+    validations:
+      required: true
+  - type: dropdown
+    id: provenance
+    attributes:
+      label: Provenance
+      options:
+        - Upstream-published by the API provider
+        - APIs.guru directory
+        - Other (explain below)
+    validations:
+      required: true
+  - type: checkboxes
+    id: policy
+    attributes:
+      label: Crawl policy checks
+      options:
+        - label: This spec is intentionally published as a public API description.
+          required: true
+        - label: Fetching it does not require authentication.
+          required: true
+        - label: The license permits indexing and redistribution of an operation summary.
+          required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything else maintainers should know.
