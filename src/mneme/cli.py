@@ -36,7 +36,10 @@ def main(argv: list[str] | None = None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mneme",
-        description="Agent-optimized search over OpenAPI specifications.",
+        description=(
+            "Mneme: a self-hosted catalog of callables (OpenAPI operations, "
+            "Python and JS/TS library symbols) and persistent memory for AI agents."
+        ),
     )
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="SQLite index path")
     sub = parser.add_subparsers(dest="command", required=True)
