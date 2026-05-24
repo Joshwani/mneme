@@ -1,0 +1,16 @@
+[Unit]
+Description=Mneme API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mneme
+Environment=MNEME_DB=/var/lib/mneme/mneme.db
+ExecStart=/opt/mneme/.venv/bin/mneme --db /var/lib/mneme/mneme.db serve --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=5
+User=mneme
+Group=mneme
+
+[Install]
+WantedBy=multi-user.target

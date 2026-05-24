@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from oas_atlas.index.db import default_db_path
+from mneme.index.db import default_db_path
 
 CLIENTS = ("cursor", "claude", "continue", "generic")
 
@@ -38,13 +38,13 @@ CLIENT_NOTES = {
 
 
 def _resolve_executable() -> str:
-    """Return an absolute path to the oas-atlas CLI when possible."""
+    """Return an absolute path to the mneme CLI when possible."""
 
-    found = shutil.which("oas-atlas")
+    found = shutil.which("mneme")
     if found:
         return str(Path(found).resolve())
     # Fall back to the bare command name; the user can edit the JSON.
-    return "oas-atlas"
+    return "mneme"
 
 
 def build_mcp_server_entry(
@@ -53,7 +53,7 @@ def build_mcp_server_entry(
     auth_config: str | None = None,
     env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Build the JSON entry that represents the OAS Atlas MCP server."""
+    """Build the JSON entry that represents the Mneme MCP server."""
 
     abs_db = str(Path(db_path or default_db_path()).expanduser().resolve())
     args: list[str] = ["--db", abs_db, "mcp-server"]
@@ -75,7 +75,7 @@ def build_mcp_config(
     db_path: str | None = None,
     auth_config: str | None = None,
     env: dict[str, str] | None = None,
-    server_name: str = "oas-atlas",
+    server_name: str = "mneme",
 ) -> dict[str, Any]:
     """Build the top-level config snippet for a given client."""
 
@@ -92,7 +92,7 @@ def render(
     db_path: str | None = None,
     auth_config: str | None = None,
     env: dict[str, str] | None = None,
-    server_name: str = "oas-atlas",
+    server_name: str = "mneme",
     include_notes: bool = True,
 ) -> str:
     """Render the snippet plus optional human-readable notes."""

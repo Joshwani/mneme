@@ -8,9 +8,9 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
-from oas_atlas.fetch import Fetcher
-from oas_atlas.normalize.load import is_openapi_document, load_openapi_text
-from oas_atlas.util import absolute_url, normalize_domain_or_url
+from mneme.fetch import Fetcher
+from mneme.normalize.load import is_openapi_document, load_openapi_text
+from mneme.util import absolute_url, normalize_domain_or_url
 
 COMMON_SPEC_PATHS = [
     "/openapi.json",

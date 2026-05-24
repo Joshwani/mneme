@@ -5,16 +5,16 @@ import json
 import sys
 from typing import Any
 
-from oas_atlas.auth import list_auth_profiles, load_auth_profiles
-from oas_atlas.call_template import build_call_template
-from oas_atlas.crawl.discover import discover_domain
-from oas_atlas.crawl.seeds import read_seed_file, seed_looks_like_spec_url
-from oas_atlas.fetch import Fetcher
-from oas_atlas.http_client import CallInputs, execute_operation_call, prepare_operation_call
-from oas_atlas.index.db import AtlasDB, DEFAULT_DB_PATH
-from oas_atlas.index.ingest import ingest_apis_guru, ingest_file, ingest_url
-from oas_atlas.index.search import SearchFilters, search_operations
-from oas_atlas.util import pretty_json
+from mneme.auth import list_auth_profiles, load_auth_profiles
+from mneme.call_template import build_call_template
+from mneme.crawl.discover import discover_domain
+from mneme.crawl.seeds import read_seed_file, seed_looks_like_spec_url
+from mneme.fetch import Fetcher
+from mneme.http_client import CallInputs, execute_operation_call, prepare_operation_call
+from mneme.index.db import MnemeDB, DEFAULT_DB_PATH
+from mneme.index.ingest import ingest_apis_guru, ingest_file, ingest_url
+from mneme.index.search import SearchFilters, search_operations
+from mneme.util import pretty_json
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="oas-atlas",
+        prog="mneme",
         description="Agent-optimized search over OpenAPI specifications.",
     )
     parser.add_argument("--db", default=DEFAULT_DB_PATH, help="SQLite index path")
@@ -134,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp_config = sub.add_parser(
         "mcp-config",
-        help="Print a ready-to-paste MCP client config for OAS Atlas.",
+        help="Print a ready-to-paste MCP client config for Mneme.",
     )
     mcp_config.add_argument(
         "--client",
@@ -147,8 +147,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mcp_config.add_argument(
         "--server-name",
-        default="oas-atlas",
-        help="Key used under mcpServers (default: oas-atlas).",
+        default="mneme",
+        help="Key used under mcpServers (default: mneme).",
     )
     mcp_config.add_argument(
         "--env",
@@ -192,7 +192,7 @@ def _add_call_args(parser: argparse.ArgumentParser) -> None:
 
 
 def cmd_add_spec(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         result = ingest_url(db, args.url, discovered_via=args.discovered_via)
         print(pretty_json(result))
@@ -202,7 +202,7 @@ def cmd_add_spec(args: argparse.Namespace) -> int:
 
 
 def cmd_add_file(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         result = ingest_file(db, args.path)
         print(pretty_json(result))
@@ -224,7 +224,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
 
         print(pretty_json([asdict(candidate) for candidate in candidates]))
         return 0
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     results: list[dict[str, Any]] = []
     try:
         for candidate in candidates:
@@ -246,7 +246,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
 
 
 def cmd_crawl_seeds(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     fetcher = Fetcher()
     summary = {"seeds": 0, "specs_ok": 0, "operations": 0, "errors": []}
     try:
@@ -290,7 +290,7 @@ def cmd_crawl_seeds(args: argparse.Namespace) -> int:
 
 
 def cmd_ingest_apis_guru(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         limit = None if args.limit == 0 else args.limit
         result = ingest_apis_guru(db, limit=limit)
@@ -301,7 +301,7 @@ def cmd_ingest_apis_guru(args: argparse.Namespace) -> int:
 
 
 def cmd_search(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         auth_required = None
         if args.auth_required == "true":
@@ -327,7 +327,7 @@ def cmd_search(args: argparse.Namespace) -> int:
 
 
 def cmd_template(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         op = db.get_operation(args.operation_id)
         if op is None:
@@ -344,7 +344,7 @@ def cmd_auth_profiles(args: argparse.Namespace) -> int:
 
 
 def cmd_prepare_call(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         op = db.get_operation(args.operation_id)
         if op is None:
@@ -362,7 +362,7 @@ def cmd_prepare_call(args: argparse.Namespace) -> int:
 
 
 def cmd_execute_call(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         op = db.get_operation(args.operation_id)
         if op is None:
@@ -383,14 +383,14 @@ def cmd_execute_call(args: argparse.Namespace) -> int:
 
 
 def cmd_mcp_server(args: argparse.Namespace) -> int:
-    from oas_atlas.mcp_server import run_mcp_server
+    from mneme.mcp_server import run_mcp_server
 
     run_mcp_server(db_path=args.db, auth_config=args.auth_config, transport=args.transport)
     return 0
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
-    db = AtlasDB(args.db)
+    db = MnemeDB(args.db)
     try:
         print(pretty_json(db.stats()))
     finally:
@@ -403,13 +403,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     import uvicorn
 
-    os.environ["OAS_ATLAS_DB"] = args.db
-    uvicorn.run("oas_atlas.api.app:app", host=args.host, port=args.port, reload=args.reload)
+    os.environ["MNEME_DB"] = args.db
+    uvicorn.run("mneme.api.app:app", host=args.host, port=args.port, reload=args.reload)
     return 0
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
-    from oas_atlas.demo import DEMO_QUERY, format_next_steps, run_demo
+    from mneme.demo import DEMO_QUERY, format_next_steps, run_demo
 
     query = args.query or DEMO_QUERY
     result = run_demo(args.db, query=query, limit=3)
@@ -434,7 +434,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 def cmd_mcp_config(args: argparse.Namespace) -> int:
-    from oas_atlas.mcp_config import parse_env_pairs, render
+    from mneme.mcp_config import parse_env_pairs, render
 
     output = render(
         client=args.client,
@@ -449,7 +449,7 @@ def cmd_mcp_config(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    from oas_atlas.doctor import collect
+    from mneme.doctor import collect
 
     diagnostics = collect(args.db)
     if getattr(args, "json", False):
@@ -459,8 +459,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     def _line(label: str, value: Any) -> None:
         print(f"  {label:<22} {value}")
 
-    print("oas-atlas doctor")
-    pkg = diagnostics["oas_atlas"]
+    print("mneme doctor")
+    pkg = diagnostics["mneme"]
     _line("package version:", pkg.get("version") or "unknown")
     _line("python:", diagnostics["python"]["version"])
     _line("python executable:", diagnostics["python"]["executable"])

@@ -1,12 +1,12 @@
-# Contributing to OAS Atlas
+# Contributing to Mneme
 
-Thanks for considering a contribution. OAS Atlas is intentionally small and self-hostable, and the goal is to keep the surface area tight and the developer experience first-class.
+Thanks for considering a contribution. Mneme is intentionally small and self-hostable, and the goal is to keep the surface area tight and the developer experience first-class.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/Joshwani/oas-atlas.git
-cd oas-atlas
+git clone https://github.com/Joshwani/mneme.git
+cd mneme
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev,mcp]'
@@ -20,18 +20,18 @@ If `pytest` is green and `ruff` is clean, you're set up correctly.
 ## Project layout
 
 ```
-src/oas_atlas/         # library + CLI + MCP server
-  api/                 # FastAPI search service
-  crawl/               # domain discovery, seed handling
-  index/               # SQLite + FTS5 storage and search
-  normalize/           # OpenAPI -> operation card normalization
-  http_client.py       # prepare/execute call with auth profiles
-  mcp_server.py        # local MCP server
-  cli.py               # argparse entry point
-tests/                 # pytest suite
-examples/              # sample specs, seeds, auth example
-deploy/                # docker-compose, systemd, cron examples
-.github/workflows/     # CI
+src/mneme/            # library + CLI + MCP server
+  api/                # FastAPI search service
+  crawl/              # domain discovery, seed handling
+  index/              # SQLite + FTS5 storage and search
+  normalize/          # OpenAPI -> operation card normalization
+  http_client.py      # prepare/execute call with auth profiles
+  mcp_server.py       # local MCP server
+  cli.py              # argparse entry point
+tests/                # pytest suite
+examples/             # sample specs, seeds, auth example
+deploy/               # docker-compose, systemd, cron examples
+.github/workflows/    # CI
 ```
 
 ## Making changes
@@ -61,16 +61,16 @@ Imperative mood, present tense, no trailing period.
 
 1. Confirm the spec URL is upstream-maintained or hosted on APIs.guru.
 2. Add a comment with the source attribution and the canonical homepage.
-3. Run `oas-atlas crawl-seeds examples/seeds.popular.txt` locally and confirm it ingests cleanly.
-4. Include the `oas-atlas stats` output in the PR description.
+3. Run `mneme crawl-seeds examples/seeds.popular.txt` locally and confirm it ingests cleanly.
+4. Include the `mneme stats` output in the PR description.
 
 ## Crawl policy
 
-OAS Atlas is conservative on purpose. Please do not add features that scan domains beyond what is already in `crawl/discover.py`, and do not add specs that require authentication to fetch.
+Mneme is conservative on purpose. Please do not add features that scan domains beyond what is already in `crawl/discover.py`, and do not add specs that require authentication to fetch.
 
 ## Reporting security issues
 
-Please do not file public issues for security problems. See [SECURITY.md](SECURITY.md).
+Please do not file public issues for security problems. Open a private security advisory on GitHub instead.
 
 ## License
 

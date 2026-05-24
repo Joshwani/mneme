@@ -5,7 +5,7 @@ from typing import Mapping
 
 import httpx
 
-DEFAULT_USER_AGENT = "oas-atlas/0.1 (+https://github.com/example/oas-atlas)"
+DEFAULT_USER_AGENT = "mneme/0.3 (+https://github.com/Joshwani/mneme)"
 
 
 @dataclass(slots=True)

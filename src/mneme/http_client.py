@@ -8,7 +8,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunpa
 
 import httpx
 
-from oas_atlas.auth import (
+from mneme.auth import (
     AuthProfile,
     apply_auth_profile,
     choose_auth_profile,
@@ -17,7 +17,7 @@ from oas_atlas.auth import (
     redact_headers,
     redact_query,
 )
-from oas_atlas.call_template import build_call_template
+from mneme.call_template import build_call_template
 
 
 class OperationCallError(ValueError):
@@ -280,11 +280,11 @@ def _missing_required_inputs(operation: dict[str, Any], inputs: CallInputs) -> l
 def _validate_host(host: str, *, profile: AuthProfile | None) -> None:
     global_allowlist = [
         x.strip().lower()
-        for x in os.environ.get("OAS_ATLAS_HTTP_ALLOW_HOSTS", "").split(",")
+        for x in os.environ.get("MNEME_HTTP_ALLOW_HOSTS", "").split(",")
         if x.strip()
     ]
     if global_allowlist and not any(_host_matches(pattern, host) for pattern in global_allowlist):
-        raise OperationCallError(f"host {host!r} is not in OAS_ATLAS_HTTP_ALLOW_HOSTS")
+        raise OperationCallError(f"host {host!r} is not in MNEME_HTTP_ALLOW_HOSTS")
     if profile and not profile_allows_host(profile, host):
         raise OperationCallError(
             f"host {host!r} is not allowed by auth profile {profile.name!r}; "

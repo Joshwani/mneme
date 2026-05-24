@@ -5,21 +5,21 @@ from pathlib import Path
 
 import pytest
 
-from oas_atlas.http_client import (
+from mneme.http_client import (
     CallInputs,
     OperationCallError,
     execute_operation_call,
     prepare_operation_call,
 )
-from oas_atlas.index.db import AtlasDB
-from oas_atlas.index.ingest import ingest_file
-from oas_atlas.index.search import SearchFilters, search_operations
+from mneme.index.db import MnemeDB
+from mneme.index.ingest import ingest_file
+from mneme.index.search import SearchFilters, search_operations
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _operation_for_query(tmp_path, query: str, method: str | None = None):
-    db = AtlasDB(tmp_path / "atlas.db")
+    db = MnemeDB(tmp_path / "mneme.db")
     try:
         ingest_file(db, ROOT / "examples" / "specs" / "todo.yaml")
         search = search_operations(

@@ -38,7 +38,7 @@ def resolve_object(
         if not ref.startswith("#/"):
             return obj
         if ref in seen:
-            return {"$ref": ref, "x-oas-atlas-recursive-ref": True}
+            return {"$ref": ref, "x-mneme-recursive-ref": True}
         try:
             target = deepcopy(resolve_local_ref(ref, root))
         except KeyError:

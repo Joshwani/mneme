@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from oas_atlas.index.db import AtlasDB
-from oas_atlas.index.ingest import ingest_file
-from oas_atlas.index.search import SearchFilters, search_operations
+from mneme.index.db import MnemeDB
+from mneme.index.ingest import ingest_file
+from mneme.index.search import SearchFilters, search_operations
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_ingest_and_search_create_todo(tmp_path):
-    db = AtlasDB(tmp_path / "atlas.db")
+    db = MnemeDB(tmp_path / "mneme.db")
     try:
         result = ingest_file(db, ROOT / "examples" / "specs" / "todo.yaml")
         assert result["operations"] == 3
@@ -26,7 +26,7 @@ def test_ingest_and_search_create_todo(tmp_path):
 
 
 def test_method_filter(tmp_path):
-    db = AtlasDB(tmp_path / "atlas.db")
+    db = MnemeDB(tmp_path / "mneme.db")
     try:
         ingest_file(db, ROOT / "examples" / "specs" / "todo.yaml")
         search = search_operations(

@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a new capability for OAS Atlas
+description: Suggest a new capability for Mneme
 title: "feat: "
 labels: ["enhancement"]
 body:
@@ -14,7 +14,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: How would you like OAS Atlas to behave?
+      description: How would you like Mneme to behave?
     validations:
       required: true
   - type: textarea

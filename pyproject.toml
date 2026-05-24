@@ -3,16 +3,26 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "oas-atlas"
-version = "0.2.0"
-description = "Agent-optimized search over public OpenAPI specifications."
+name = "mneme-server"
+version = "0.3.0"
+description = "Mneme: a self-hosted catalog of callables (OpenAPI operations, library symbols) and persistent memory for AI agents."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [
-  { name = "OAS Atlas Contributors" }
+  { name = "Mneme Contributors" }
 ]
-keywords = ["openapi", "agents", "llm", "tools", "search", "crawler"]
+keywords = [
+  "openapi",
+  "agents",
+  "llm",
+  "tools",
+  "search",
+  "crawler",
+  "mcp",
+  "memory",
+  "library-index",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -45,17 +55,17 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Joshwani/oas-atlas"
-Repository = "https://github.com/Joshwani/oas-atlas"
-Source = "https://github.com/Joshwani/oas-atlas"
-Issues = "https://github.com/Joshwani/oas-atlas/issues"
-"Bug Tracker" = "https://github.com/Joshwani/oas-atlas/issues"
-Changelog = "https://github.com/Joshwani/oas-atlas/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/Joshwani/oas-atlas#readme"
+Homepage = "https://github.com/Joshwani/mneme"
+Repository = "https://github.com/Joshwani/mneme"
+Source = "https://github.com/Joshwani/mneme"
+Issues = "https://github.com/Joshwani/mneme/issues"
+"Bug Tracker" = "https://github.com/Joshwani/mneme/issues"
+Changelog = "https://github.com/Joshwani/mneme/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/Joshwani/mneme#readme"
 
 [project.scripts]
-oas-atlas = "oas_atlas.cli:main"
-oas-atlas-mcp = "oas_atlas.mcp_server:main"
+mneme = "mneme.cli:main"
+mneme-mcp = "mneme.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

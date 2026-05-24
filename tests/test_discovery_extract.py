@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from oas_atlas.crawl.discover import _extract_spec_urls_from_text
+from mneme.crawl.discover import _extract_spec_urls_from_text
 
 
 def test_extract_swagger_ui_url():

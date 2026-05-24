@@ -5,11 +5,11 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from oas_atlas.auth import load_auth_profiles
-from oas_atlas.call_template import build_call_template
-from oas_atlas.http_client import CallInputs, execute_operation_call, prepare_operation_call
-from oas_atlas.index.db import AtlasDB, default_db_path
-from oas_atlas.index.search import SearchFilters, search_operations
+from mneme.auth import load_auth_profiles
+from mneme.call_template import build_call_template
+from mneme.http_client import CallInputs, execute_operation_call, prepare_operation_call
+from mneme.index.db import MnemeDB, default_db_path
+from mneme.index.search import SearchFilters, search_operations
 
 
 class SearchInclude(BaseModel):
@@ -43,11 +43,11 @@ class OperationCallRequest(BaseModel):
 def create_app(db_path: str | None = None) -> FastAPI:
     db_path = db_path or default_db_path()
     app = FastAPI(
-        title="OAS Atlas",
+        title="Mneme",
         version="0.2.0",
         description="Agent-optimized search over OpenAPI-described operations.",
     )
-    db = AtlasDB(db_path)
+    db = MnemeDB(db_path)
 
     @app.get("/health")
     def health() -> dict[str, Any]:

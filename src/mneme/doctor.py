@@ -1,4 +1,4 @@
-"""Environment diagnostics for OAS Atlas."""
+"""Environment diagnostics for Mneme."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from oas_atlas.index.db import AtlasDB, default_db_path
+from mneme.index.db import MnemeDB, default_db_path
 
 
 def _module_info(module_name: str, distribution: str | None = None) -> dict[str, Any]:
@@ -63,7 +63,7 @@ def collect(db_path: str | None = None) -> dict[str, Any]:
     db_open_error: str | None = None
     if db_exists:
         try:
-            db = AtlasDB(resolved_db)
+            db = MnemeDB(resolved_db)
             try:
                 stats = db.stats()
             finally:
@@ -72,7 +72,7 @@ def collect(db_path: str | None = None) -> dict[str, Any]:
             db_open_error = str(exc)
 
     return {
-        "oas_atlas": _module_info("oas_atlas", "oas-atlas"),
+        "mneme": _module_info("mneme", "mneme-server"),
         "python": {
             "version": platform.python_version(),
             "executable": sys.executable,
@@ -83,11 +83,11 @@ def collect(db_path: str | None = None) -> dict[str, Any]:
             "release": platform.release(),
             "machine": platform.machine(),
         },
-        "cli_on_path": shutil.which("oas-atlas") or None,
+        "cli_on_path": shutil.which("mneme") or None,
         "env": {
-            "OAS_ATLAS_DB": os.environ.get("OAS_ATLAS_DB"),
-            "OAS_ATLAS_AUTH_CONFIG": os.environ.get("OAS_ATLAS_AUTH_CONFIG"),
-            "OAS_ATLAS_HTTP_ALLOW_HOSTS": os.environ.get("OAS_ATLAS_HTTP_ALLOW_HOSTS"),
+            "MNEME_DB": os.environ.get("MNEME_DB"),
+            "MNEME_AUTH_CONFIG": os.environ.get("MNEME_AUTH_CONFIG"),
+            "MNEME_HTTP_ALLOW_HOSTS": os.environ.get("MNEME_HTTP_ALLOW_HOSTS"),
             "XDG_DATA_HOME": os.environ.get("XDG_DATA_HOME"),
         },
         "db": {

@@ -1,9 +1,9 @@
-from .db import AtlasDB
+from .db import MnemeDB
 from .ingest import ingest_file, ingest_text, ingest_url
 from .search import SearchFilters, search_operations
 
 __all__ = [
-    "AtlasDB",
+    "MnemeDB",
     "ingest_file",
     "ingest_text",
     "ingest_url",

@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from oas_atlas.fetch import Fetcher
-from oas_atlas.index.db import AtlasDB
-from oas_atlas.normalize.load import load_openapi_text
-from oas_atlas.normalize.operations import make_spec_id, normalize_operations
-from oas_atlas.util import sha256_hex, utc_now_iso
+from mneme.fetch import Fetcher
+from mneme.index.db import MnemeDB
+from mneme.normalize.load import load_openapi_text
+from mneme.normalize.operations import make_spec_id, normalize_operations
+from mneme.util import sha256_hex, utc_now_iso
 
 APIS_GURU_LIST_URL = "https://api.apis.guru/v2/list.json"
 
@@ -17,7 +17,7 @@ class IngestError(RuntimeError):
 
 
 def ingest_text(
-    db: AtlasDB,
+    db: MnemeDB,
     text: str,
     *,
     source_url: str | None,
@@ -55,7 +55,7 @@ def ingest_text(
 
 
 def ingest_url(
-    db: AtlasDB,
+    db: MnemeDB,
     url: str,
     *,
     fetcher: Fetcher | None = None,
@@ -75,7 +75,7 @@ def ingest_url(
 
 
 def ingest_file(
-    db: AtlasDB,
+    db: MnemeDB,
     path: str | Path,
     *,
     discovered_via: str | None = "local_file",
@@ -87,7 +87,7 @@ def ingest_file(
 
 
 def ingest_apis_guru(
-    db: AtlasDB,
+    db: MnemeDB,
     *,
     fetcher: Fetcher | None = None,
     limit: int | None = None,

@@ -1,40 +1,44 @@
-# OAS Atlas
+# Mneme
 
-[![CI](https://github.com/Joshwani/oas-atlas/actions/workflows/test.yml/badge.svg)](https://github.com/Joshwani/oas-atlas/actions/workflows/test.yml)
-[![PyPI](https://img.shields.io/pypi/v/oas-atlas.svg)](https://pypi.org/project/oas-atlas/)
-[![Python](https://img.shields.io/pypi/pyversions/oas-atlas.svg)](https://pypi.org/project/oas-atlas/)
+[![CI](https://github.com/Joshwani/mneme/actions/workflows/test.yml/badge.svg)](https://github.com/Joshwani/mneme/actions/workflows/test.yml)
+[![PyPI](https://img.shields.io/pypi/v/mneme-server.svg)](https://pypi.org/project/mneme-server/)
+[![Python](https://img.shields.io/pypi/pyversions/mneme-server.svg)](https://pypi.org/project/mneme-server/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![GHCR](https://img.shields.io/badge/ghcr.io-joshwani%2Foas--atlas-2b5797)](https://github.com/Joshwani/oas-atlas/pkgs/container/oas-atlas)
+[![GHCR](https://img.shields.io/badge/ghcr.io-joshwani%2Fmneme-2b5797)](https://github.com/Joshwani/mneme/pkgs/container/mneme)
 
-**Agent-optimized search over the OpenAPI specs you use every day.**
+**A self-hosted catalog of callables and persistent memory for AI agents.**
 
-OAS Atlas is a small, self-hostable indexer and search service for OpenAPI documents. It turns thousands of operations across many APIs into a searchable, agent-friendly catalog so an LLM can find the right operation, retrieve a minimal schema slice, and (optionally) call it.
+Mneme (the Greek muse of memory) is a small, local-first indexer and search service that an LLM agent can consult to find the right HTTP API operation, library symbol, or saved note — and then retrieve a minimal slice instead of dumping everything into context. The package is published on PyPI as [`mneme-server`](https://pypi.org/project/mneme-server/); the CLI is `mneme`.
 
-The searchable unit is not "an API." It is **an operation** — `POST /v1/refunds`, `POST /repos/{owner}/{repo}/issues`, `POST /messages`, and so on.
+The searchable unit is **a callable** — not "an API" or "a library." That can be:
+
+- an OpenAPI operation (e.g., `POST /v1/refunds`),
+- a library symbol (e.g., `matplotlib.pyplot.bar`) — *coming in 0.3*,
+- a saved note in the agent's persistent memory — *coming in 0.3*.
 
 ## Quickstart in 60 seconds
 
 ```bash
-pip install oas-atlas
-oas-atlas demo                          # indexes a bundled spec, runs a search
-oas-atlas mcp-config --client cursor    # prints ready-to-paste MCP config
-oas-atlas doctor                        # environment diagnostics
+pip install mneme-server
+mneme demo                            # indexes a bundled spec, runs a search
+mneme mcp-config --client cursor      # prints ready-to-paste MCP config
+mneme doctor                          # environment diagnostics
 ```
 
-That is it. The default index lives in a per-user directory (XDG-aware), so subsequent commands work without `--db`.
+The default index lives in a per-user directory (XDG-aware), so subsequent commands work without `--db`.
 
-> Want to see it on real APIs? `oas-atlas crawl-seeds examples/seeds.popular.txt` will pull in GitHub, Stripe, Slack, DigitalOcean, Twilio, and others.
+> Want to see it on real APIs? `mneme crawl-seeds examples/seeds.popular.txt` will pull in GitHub, Stripe, Slack, DigitalOcean, Twilio, and others.
 
-## Why operation-level search?
+## Why callable-level search?
 
-An agent rarely needs the entire Stripe, GitHub, or Slack API in context. It needs to find operations that match a task, like:
+An agent rarely needs the entire Stripe, GitHub, or Slack API in context. It needs to find callables that match a task:
 
 - `POST /repos/{owner}/{repo}/issues`
 - `POST /v1/refunds`
-- `GET /customers/{id}/invoices`
-- `POST /messages`
+- `matplotlib.pyplot.errorbar`  *(library symbols, coming soon)*
+- `the note I saved about our auth flow`  *(memory, coming soon)*
 
-OAS Atlas indexes each operation with a compact agent-facing summary, required inputs, auth metadata, response fields, provenance, and a minimal spec slice. Search returns a small list; the agent then pulls only the operation slice it actually needs.
+Mneme indexes each callable with a compact agent-facing summary, required inputs, auth metadata, response fields (for HTTP), signatures/docstrings (for library symbols), provenance, and a minimal usage slice. Search returns a small list; the agent then pulls only the slice it actually needs.
 
 ## Architecture
 
@@ -44,17 +48,22 @@ flowchart LR
   url[direct spec URL] --> crawler
   file[local OpenAPI file] --> normalize
   guru[APIs.guru] --> normalize
+  pypi[PyPI wheel] --> symbols
+  npmtarball[npm tarball / .d.ts] --> symbols
   crawler[discover + fetch] --> normalize
-  normalize[normalize: operation cards + spec slice] --> sqlite[(SQLite + FTS5)]
+  normalize[normalize operations] --> sqlite[(SQLite + FTS5)]
+  symbols[normalize library symbols] --> sqlite
+  notes[agent notes / workspace] --> notesdb[(notes.db)]
   sqlite --> httpapi[FastAPI search service]
   sqlite --> mcp[Local MCP server]
+  notesdb --> mcp
   httpapi --> agent[Agents / clients]
   mcp --> agent
 ```
 
-## What you get
+## What you get today (0.2.0)
 
-- A conservative OpenAPI discovery crawler for a domain.
+- Conservative OpenAPI discovery crawler for a domain.
 - Direct ingestion for OpenAPI/Swagger URLs and local files.
 - APIs.guru bulk ingestion for bootstrapping a public corpus.
 - A normalizer that converts each HTTP method/path into a compact operation card.
@@ -63,13 +72,18 @@ flowchart LR
 - A local MCP server with search, spec retrieval, auth-aware request preparation, and guarded HTTP execution.
 - Docker Compose, systemd, cron, and GitHub Actions examples.
 
+## What's coming in 0.3
+
+- **Agent memory.** A searchable notebook (FTS5-backed) plus an opt-in scoped file workspace for persisting notes, snippets, and small artifacts across MCP sessions. Stored in a separate `notes.db`.
+- **Library indexing.** `mneme add-pylib <name>` (Python, via `griffe`) and `mneme add-jslib <name>` (JavaScript/TypeScript, via `.d.ts` parsing). Library symbols are searchable side-by-side with HTTP operations.
+
 ## Install
 
 From source while the project is pre-PyPI:
 
 ```bash
-git clone https://github.com/Joshwani/oas-atlas.git
-cd oas-atlas
+git clone https://github.com/Joshwani/mneme.git
+cd mneme
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
@@ -77,31 +91,38 @@ python -m pip install -e '.[dev]'
 python -m pip install -e '.[dev,mcp]'
 ```
 
+Once on PyPI:
+
+```bash
+pip install mneme-server         # base
+pip install 'mneme-server[mcp]'  # with MCP server
+```
+
 ## CLI cheatsheet
 
 ```bash
 # one-command demo
-oas-atlas demo
+mneme demo
 
 # index sources
-oas-atlas add-file examples/specs/todo.yaml
-oas-atlas add-spec https://example.com/openapi.yaml
-oas-atlas discover example.com --ingest
-oas-atlas crawl-seeds examples/seeds.popular.txt
-oas-atlas ingest-apis-guru --limit 25
+mneme add-file examples/specs/todo.yaml
+mneme add-spec https://example.com/openapi.yaml
+mneme discover example.com --ingest
+mneme crawl-seeds examples/seeds.popular.txt
+mneme ingest-apis-guru --limit 25
 
 # search
-oas-atlas search "create a todo with a due date"
-oas-atlas search "create refund" --method POST --provider-domain api.stripe.com
+mneme search "create a todo with a due date"
+mneme search "create refund" --method POST --provider-domain api.stripe.com
 
 # inspect
-oas-atlas stats
-oas-atlas doctor
+mneme stats
+mneme doctor
 
 # serve / run as MCP
-oas-atlas serve --host 127.0.0.1 --port 8080
-oas-atlas mcp-server
-oas-atlas mcp-config --client cursor
+mneme serve --host 127.0.0.1 --port 8080
+mneme mcp-server
+mneme mcp-config --client cursor
 ```
 
 All commands accept `--db <path>` to override the per-user default.
@@ -111,20 +132,20 @@ All commands accept `--db <path>` to override the per-user default.
 `examples/seeds.popular.txt` is a curated list of stable, public OpenAPI documents you can ingest in one shot:
 
 ```bash
-oas-atlas crawl-seeds examples/seeds.popular.txt
-oas-atlas stats
+mneme crawl-seeds examples/seeds.popular.txt
+mneme stats
 ```
 
 To suggest an API for the starter pack, open an issue using the **Add a public API to the starter index** template.
 
 ## Local MCP server
 
-OAS Atlas runs as a local MCP server. API credentials stay on the user's machine.
+Mneme runs as a local MCP server. API credentials and notes stay on the user's machine.
 
 ```bash
 python -m pip install -e '.[mcp]'
-oas-atlas mcp-server                          # stdio (default)
-oas-atlas mcp-server --transport streamable-http
+mneme mcp-server                          # stdio (default)
+mneme mcp-server --transport streamable-http
 ```
 
 Tools exposed:
@@ -137,17 +158,19 @@ get_call_template          # non-executing request template
 list_local_auth_profiles   # local auth profiles without secrets
 prepare_http_call          # redacted prepared request, no network traffic
 execute_http_call          # dry-run by default; real calls require confirm=true
-atlas_stats                # local index stats
+mneme_stats                # local index stats
 ```
+
+Memory tools (`notes_*`, `workspace_*`) and library-symbol tools land in 0.3.
 
 Print a paste-ready config for your client:
 
 ```bash
-oas-atlas mcp-config --client cursor      # ~/.cursor/mcp.json or repo .cursor/mcp.json
-oas-atlas mcp-config --client claude      # Claude Desktop
-oas-atlas mcp-config --client continue    # Continue.dev
-oas-atlas mcp-config --client generic     # bare mcpServers snippet
-oas-atlas mcp-config --client cursor --auth-config ~/.config/oas-atlas/auth.json
+mneme mcp-config --client cursor      # ~/.cursor/mcp.json or repo .cursor/mcp.json
+mneme mcp-config --client claude      # Claude Desktop
+mneme mcp-config --client continue    # Continue.dev
+mneme mcp-config --client generic     # bare mcpServers snippet
+mneme mcp-config --client cursor --auth-config ~/.config/mneme/auth.json
 ```
 
 ## Local auth profiles
@@ -157,7 +180,7 @@ Auth profiles are JSON files mapping a friendly profile name to credentials stor
 Default path:
 
 ```text
-~/.config/oas-atlas/auth.json
+~/.config/mneme/auth.json
 ```
 
 Example:
@@ -192,14 +215,14 @@ Example:
 List profiles without leaking secrets:
 
 ```bash
-oas-atlas auth-profiles --auth-config ~/.config/oas-atlas/auth.json
+mneme auth-profiles --auth-config ~/.config/mneme/auth.json
 ```
 
 Prepare a call without sending it:
 
 ```bash
-oas-atlas prepare-call op_... \
-  --auth-config ~/.config/oas-atlas/auth.json \
+mneme prepare-call op_... \
+  --auth-config ~/.config/mneme/auth.json \
   --auth-profile todo-local \
   --json-body '{"title":"ship mcp"}'
 ```
@@ -207,8 +230,8 @@ oas-atlas prepare-call op_... \
 Execute a real call only when explicitly confirmed:
 
 ```bash
-oas-atlas execute-call op_... \
-  --auth-config ~/.config/oas-atlas/auth.json \
+mneme execute-call op_... \
+  --auth-config ~/.config/mneme/auth.json \
   --auth-profile todo-local \
   --json-body '{"title":"ship mcp"}' \
   --send --confirm
@@ -220,7 +243,7 @@ Guardrails:
 - real HTTP execution requires `confirm=true` / `--confirm`;
 - mutating unauthenticated calls are blocked;
 - auth profiles can restrict allowed HTTP methods and hosts;
-- `OAS_ATLAS_HTTP_ALLOW_HOSTS` can globally restrict execution hosts.
+- `MNEME_HTTP_ALLOW_HOSTS` can globally restrict execution hosts.
 
 ## HTTP Search API
 
@@ -281,14 +304,14 @@ POST /operations/{operation_id}/execute-call
 
 ## Database location
 
-OAS Atlas picks a sensible default path so commands work without `--db`:
+Mneme picks a sensible default path so commands work without `--db`:
 
-1. `$OAS_ATLAS_DB` if set
-2. `$XDG_DATA_HOME/oas-atlas/oas_atlas.db` if set
-3. `~/.local/share/oas-atlas/oas_atlas.db` on Linux/macOS
-4. `%LOCALAPPDATA%\oas-atlas\oas_atlas.db` on Windows
+1. `$MNEME_DB` if set
+2. `$XDG_DATA_HOME/mneme/mneme.db` if set
+3. `~/.local/share/mneme/mneme.db` on Linux/macOS
+4. `%LOCALAPPDATA%\mneme\mneme.db` on Windows
 
-Override at any time with `--db /path/to/oas_atlas.db`.
+Override at any time with `--db /path/to/mneme.db`.
 
 ## Self-host with Docker Compose
 
@@ -300,8 +323,8 @@ docker compose up --build -d
 Ingest the demo spec into the Docker volume:
 
 ```bash
-docker compose run --rm oas-atlas \
-  oas-atlas --db /data/oas_atlas.db add-file /examples/specs/todo.yaml
+docker compose run --rm mneme \
+  mneme --db /data/mneme.db add-file /examples/specs/todo.yaml
 ```
 
 ```bash
@@ -313,7 +336,7 @@ curl -s -X POST http://127.0.0.1:8080/search \
 Pre-built container images are published to GHCR on tagged releases:
 
 ```bash
-docker pull ghcr.io/joshwani/oas-atlas:latest
+docker pull ghcr.io/joshwani/mneme:latest
 ```
 
 ## Self-host crawler deployment
@@ -323,33 +346,33 @@ For now, the recommended deployment model is bring-your-own-infra:
 1. Run the API container or systemd service.
 2. Store the SQLite index on a persistent volume.
 3. Keep a curated `seeds.txt` file of domains and spec URLs.
-4. Run `oas-atlas crawl-seeds` from cron or another scheduler.
+4. Run `mneme crawl-seeds` from cron or another scheduler.
 5. Back up the SQLite file like any other application data.
 
 Example cron entry:
 
 ```cron
-10 2 * * * cd /opt/oas-atlas && /opt/oas-atlas/.venv/bin/oas-atlas --db /var/lib/oas-atlas/oas_atlas.db crawl-seeds /etc/oas-atlas/seeds.txt >> /var/log/oas-atlas-crawl.log 2>&1
+10 2 * * * cd /opt/mneme && /opt/mneme/.venv/bin/mneme --db /var/lib/mneme/mneme.db crawl-seeds /etc/mneme/seeds.txt >> /var/log/mneme-crawl.log 2>&1
 ```
 
 ## Troubleshooting
 
-Run `oas-atlas doctor` first. It prints the resolved DB path, index size, installed extras, and a network reachability check. Most reports should include its output.
+Run `mneme doctor` first. It prints the resolved DB path, index size, installed extras, and a network reachability check. Most reports should include its output.
 
 Common issues:
 
-- **"operation not found" or empty search results.** The index is empty. Run `oas-atlas demo` or `oas-atlas crawl-seeds examples/seeds.popular.txt`.
-- **MCP server fails to start with an ImportError.** The optional MCP extra isn't installed. Run `python -m pip install -e '.[mcp]'` (or `pip install 'oas-atlas[mcp]'`).
-- **`oas-atlas mcp-config --client cursor` shows `command: oas-atlas` instead of an absolute path.** The `oas-atlas` binary isn't on PATH in the shell that launches your MCP client. Activate the venv first or pass `--db <absolute>` plus edit `command` to the absolute path printed by `which oas-atlas`.
-- **401/403 when executing a call.** Check `oas-atlas auth-profiles --auth-config ~/.config/oas-atlas/auth.json` and confirm the referenced `*_env` environment variable is set in the launching shell.
-- **"host not allowed" errors when executing.** Either widen `allow_methods` / `allowed_hosts` in your profile, or unset/relax `OAS_ATLAS_HTTP_ALLOW_HOSTS`.
+- **"operation not found" or empty search results.** The index is empty. Run `mneme demo` or `mneme crawl-seeds examples/seeds.popular.txt`.
+- **MCP server fails to start with an ImportError.** The optional MCP extra isn't installed. Run `python -m pip install -e '.[mcp]'` (or `pip install 'mneme-server[mcp]'`).
+- **`mneme mcp-config --client cursor` shows `command: mneme` instead of an absolute path.** The `mneme` binary isn't on PATH in the shell that launches your MCP client. Activate the venv first or edit `command` to the absolute path printed by `which mneme`.
+- **401/403 when executing a call.** Check `mneme auth-profiles --auth-config ~/.config/mneme/auth.json` and confirm the referenced `*_env` environment variable is set in the launching shell.
+- **"host not allowed" errors when executing.** Either widen `allow_methods` / `allowed_hosts` in your profile, or unset/relax `MNEME_HTTP_ALLOW_HOSTS`.
 
 ## When to move beyond SQLite
 
 SQLite + FTS5 is enough for the MVP and for private/team indexes. Move to a larger architecture when you need:
 
 - concurrent crawler workers,
-- millions of operations,
+- millions of callables,
 - vector retrieval,
 - public multi-tenant search,
 - owner verification workflows,
@@ -391,14 +414,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details and [CHANGELOG.md](CHANGELOG.
 
 ## Roadmap
 
+- Agent memory: searchable notebook + opt-in scoped file workspace (0.3).
+- Library indexing: Python (via `griffe`) and JS/TS (via `.d.ts`) (0.3).
 - Owner-verified submissions via DNS TXT or GitHub repo verification.
 - Better RFC 9727 Linkset parsing.
-- Better APIs.json support.
-- Duplicate clustering by operation similarity.
+- Duplicate clustering by callable similarity.
 - Hybrid lexical + embedding retrieval.
-- Reranking with task/operation labels.
-- Operation graph edges for multi-step workflows.
-- Public benchmark: natural-language task to expected operation IDs.
+- Reranking with task/callable labels.
+- Callable graph edges for multi-step workflows.
+- Public benchmark: natural-language task to expected callable IDs.
 
 ## License
 

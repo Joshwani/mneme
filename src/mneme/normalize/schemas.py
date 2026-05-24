@@ -100,7 +100,7 @@ def simplify_schema(
         out["properties"] = {}
         for idx, (name, prop_schema) in enumerate(properties.items()):
             if idx >= max_properties:
-                out["x-oas-atlas-truncated-properties"] = len(properties) - max_properties
+                out["x-mneme-truncated-properties"] = len(properties) - max_properties
                 break
             out["properties"][name] = simplify_schema(
                 prop_schema,

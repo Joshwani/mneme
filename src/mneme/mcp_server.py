@@ -3,29 +3,29 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from oas_atlas.auth import list_auth_profiles, load_auth_profiles
-from oas_atlas.http_client import CallInputs, execute_operation_call, prepare_operation_call
-from oas_atlas.index.db import AtlasDB, default_db_path
-from oas_atlas.index.search import SearchFilters, search_operations as search_index_operations
+from mneme.auth import list_auth_profiles, load_auth_profiles
+from mneme.http_client import CallInputs, execute_operation_call, prepare_operation_call
+from mneme.index.db import MnemeDB, default_db_path
+from mneme.index.search import SearchFilters, search_operations as search_index_operations
 
 
 def create_mcp_server(db_path: str | None = None, auth_config: str | None = None) -> Any:
-    """Create a local MCP server exposing OAS Atlas search and HTTP execution tools."""
+    """Create a local MCP server exposing Mneme search and HTTP execution tools."""
 
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover - exercised only without optional extra.
         raise RuntimeError(
             "The MCP server requires the optional MCP dependency. Install with: "
-            "python -m pip install 'oas-atlas[mcp]'"
+            "python -m pip install 'mneme-server[mcp]'"
         ) from exc
 
     db_path = db_path or default_db_path()
-    auth_config = auth_config or os.environ.get("OAS_ATLAS_AUTH_CONFIG")
-    mcp = FastMCP("OAS Atlas", json_response=True)
+    auth_config = auth_config or os.environ.get("MNEME_AUTH_CONFIG")
+    mcp = FastMCP("Mneme", json_response=True)
 
     def get_operation_or_error(operation_id: str) -> dict[str, Any]:
-        db = AtlasDB(db_path)
+        db = MnemeDB(db_path)
         try:
             op = db.get_operation(operation_id)
             if op is None:
@@ -50,7 +50,7 @@ def create_mcp_server(db_path: str | None = None, auth_config: str | None = None
         prepare_http_call, or execute_http_call.
         """
 
-        db = AtlasDB(db_path)
+        db = MnemeDB(db_path)
         try:
             return search_index_operations(
                 db,
@@ -82,7 +82,7 @@ def create_mcp_server(db_path: str | None = None, auth_config: str | None = None
     def get_call_template(operation_id: str) -> dict[str, Any]:
         """Return a non-executing call template for one operation."""
 
-        from oas_atlas.call_template import build_call_template
+        from mneme.call_template import build_call_template
 
         return build_call_template(get_operation_or_error(operation_id))
 
@@ -90,7 +90,7 @@ def create_mcp_server(db_path: str | None = None, auth_config: str | None = None
     def list_local_auth_profiles() -> dict[str, Any]:
         """List local auth profiles without exposing secret values.
 
-        Profiles are read from OAS_ATLAS_AUTH_CONFIG or ~/.config/oas-atlas/auth.json.
+        Profiles are read from MNEME_AUTH_CONFIG or ~/.config/mneme/auth.json.
         Pass a profile name to prepare_http_call or execute_http_call when an API
         requires credentials.
         """
@@ -172,10 +172,10 @@ def create_mcp_server(db_path: str | None = None, auth_config: str | None = None
         )
 
     @mcp.tool()
-    def atlas_stats() -> dict[str, Any]:
-        """Return index statistics for this local OAS Atlas database."""
+    def mneme_stats() -> dict[str, Any]:
+        """Return index statistics for this local Mneme database."""
 
-        db = AtlasDB(db_path)
+        db = MnemeDB(db_path)
         try:
             stats = db.stats()
             stats["auth_config_present"] = bool(load_auth_profiles(auth_config))

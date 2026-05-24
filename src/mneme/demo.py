@@ -6,9 +6,9 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from oas_atlas.index.db import AtlasDB, default_db_path
-from oas_atlas.index.ingest import ingest_text
-from oas_atlas.index.search import SearchFilters, search_operations
+from mneme.index.db import MnemeDB, default_db_path
+from mneme.index.ingest import ingest_text
+from mneme.index.search import SearchFilters, search_operations
 
 DEMO_QUERY = "create a todo with a due date"
 
@@ -121,12 +121,12 @@ def run_demo(
     """
 
     resolved_db = db_path or default_db_path()
-    db = AtlasDB(resolved_db)
+    db = MnemeDB(resolved_db)
     try:
         ingest_result = ingest_text(
             db,
             DEMO_SPEC_YAML,
-            source_url="demo://oas-atlas/examples/todo.yaml",
+            source_url="demo://mneme/examples/todo.yaml",
             discovered_via="demo",
         )
         search_result = search_operations(
@@ -153,8 +153,8 @@ def format_next_steps(db_path: str) -> str:
 
     # Resolve a stable absolute path so the hints are copy-pasteable.
     abs_db = str(Path(db_path).expanduser().resolve())
-    mcp_available = shutil.which("oas-atlas") is not None
-    cli = "oas-atlas" if mcp_available else "python -m oas_atlas.cli"
+    mcp_available = shutil.which("mneme") is not None
+    cli = "mneme" if mcp_available else "python -m mneme.cli"
     return (
         "\nNext steps:\n"
         f"  1) Search again:        {cli} search 'list todos'\n"
@@ -162,5 +162,5 @@ def format_next_steps(db_path: str) -> str:
         f"  3) Serve the API:       {cli} serve\n"
         f"  4) Print MCP config:    {cli} mcp-config --client cursor\n"
         f"\nIndex location:         {abs_db}\n"
-        "Override with --db <path> or set OAS_ATLAS_DB.\n"
+        "Override with --db <path> or set MNEME_DB.\n"
     )

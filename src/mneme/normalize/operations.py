@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
 
-from oas_atlas.util import provider_domain_from_url, stable_id
+from mneme.util import provider_domain_from_url, stable_id
 
 from .refs import resolve_object
 from .schemas import schema_field_names, simplify_schema

@@ -1,0 +1,3 @@
+# Run with: crontab deploy/mneme.cron
+# Update a self-hosted index nightly at 02:10 UTC from your curated seed file.
+10 2 * * * cd /opt/mneme && /opt/mneme/.venv/bin/mneme --db /var/lib/mneme/mneme.db crawl-seeds /etc/mneme/seeds.txt >> /var/log/mneme-crawl.log 2>&1

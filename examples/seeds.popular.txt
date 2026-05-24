@@ -4,7 +4,7 @@
 #   - a domain (api.example.com) which will be discovered.
 #
 # Use:
-#   oas-atlas crawl-seeds examples/seeds.popular.txt
+#   mneme crawl-seeds examples/seeds.popular.txt
 #
 # Provenance notes:
 #   - APIs.guru: https://apis.guru/ aggregates many public OpenAPI specs.

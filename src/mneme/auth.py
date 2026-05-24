@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-DEFAULT_AUTH_CONFIG_PATH = "~/.config/oas-atlas/auth.json"
+DEFAULT_AUTH_CONFIG_PATH = "~/.config/mneme/auth.json"
 
 
 class AuthConfigError(ValueError):
@@ -114,7 +114,7 @@ PROFILE_KEYS = {
 
 
 def default_auth_config_path() -> Path:
-    return Path(os.environ.get("OAS_ATLAS_AUTH_CONFIG", DEFAULT_AUTH_CONFIG_PATH)).expanduser()
+    return Path(os.environ.get("MNEME_AUTH_CONFIG", DEFAULT_AUTH_CONFIG_PATH)).expanduser()
 
 
 def load_auth_profiles(path: str | Path | None = None) -> dict[str, AuthProfile]:

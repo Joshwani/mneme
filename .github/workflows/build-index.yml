@@ -23,11 +23,11 @@ jobs:
       - name: Build small demo index
         run: |
           mkdir -p data
-          oas-atlas --db data/oas_atlas.db add-file examples/specs/todo.yaml
+          mneme --db data/mneme.db add-file examples/specs/todo.yaml
           # For a larger public demo index, uncomment this. The default limit is intentionally small.
-          # oas-atlas --db data/oas_atlas.db ingest-apis-guru --limit 25
-          oas-atlas --db data/oas_atlas.db stats
+          # mneme --db data/mneme.db ingest-apis-guru --limit 25
+          mneme --db data/mneme.db stats
       - uses: actions/upload-artifact@v4
         with:
-          name: oas-atlas-demo-index
-          path: data/oas_atlas.db
+          name: mneme-demo-index
+          path: data/mneme.db

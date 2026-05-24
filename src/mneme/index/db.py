@@ -6,33 +6,33 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
-from oas_atlas.normalize.operations import OperationCard
-from oas_atlas.util import json_dumps_compact, json_loads_maybe
+from mneme.normalize.operations import OperationCard
+from mneme.util import json_dumps_compact, json_loads_maybe
 
 
 def default_db_path() -> str:
     """Return the default SQLite index path.
 
     Resolution order:
-    1. ``$OAS_ATLAS_DB`` if set.
-    2. ``$XDG_DATA_HOME/oas-atlas/oas_atlas.db`` if set.
-    3. ``%LOCALAPPDATA%\\oas-atlas\\oas_atlas.db`` on Windows.
-    4. ``~/.local/share/oas-atlas/oas_atlas.db`` on Linux/macOS.
+    1. ``$MNEME_DB`` if set.
+    2. ``$XDG_DATA_HOME/mneme/mneme.db`` if set.
+    3. ``%LOCALAPPDATA%\\mneme\\mneme.db`` on Windows.
+    4. ``~/.local/share/mneme/mneme.db`` on Linux/macOS.
     """
 
-    env = os.environ.get("OAS_ATLAS_DB")
+    env = os.environ.get("MNEME_DB")
     if env:
         return env
 
     xdg = os.environ.get("XDG_DATA_HOME")
     if xdg:
-        return str(Path(xdg) / "oas-atlas" / "oas_atlas.db")
+        return str(Path(xdg) / "mneme" / "mneme.db")
 
     if sys.platform.startswith("win"):
         base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-        return str(Path(base) / "oas-atlas" / "oas_atlas.db")
+        return str(Path(base) / "mneme" / "mneme.db")
 
-    return str(Path.home() / ".local" / "share" / "oas-atlas" / "oas_atlas.db")
+    return str(Path.home() / ".local" / "share" / "mneme" / "mneme.db")
 
 
 DEFAULT_DB_PATH = default_db_path()
@@ -101,7 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_operations_path ON operations(path);
 """
 
 
-class AtlasDB:
+class MnemeDB:
     def __init__(self, path: str | Path = DEFAULT_DB_PATH) -> None:
         self.path = Path(path)
         if self.path.parent and str(self.path.parent) != ".":

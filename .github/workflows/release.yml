@@ -40,15 +40,15 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Install oas-atlas
+      - name: Install mneme
         run: python -m pip install -e .
       - name: Build a small demo index
         run: |
           mkdir -p artifacts
-          oas-atlas --db artifacts/oas_atlas.demo.db add-file examples/specs/todo.yaml
+          mneme --db artifacts/mneme.demo.db add-file examples/specs/todo.yaml
           # Pull a small handful of popular specs; tolerate individual failures.
-          oas-atlas --db artifacts/oas_atlas.demo.db crawl-seeds examples/seeds.popular.txt || true
-          oas-atlas --db artifacts/oas_atlas.demo.db stats > artifacts/stats.json
+          mneme --db artifacts/mneme.demo.db crawl-seeds examples/seeds.popular.txt || true
+          mneme --db artifacts/mneme.demo.db stats > artifacts/stats.json
       - uses: actions/upload-artifact@v4
         with:
           name: demo-index
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/oas-atlas
+      url: https://pypi.org/p/mneme-server
     permissions:
       id-token: write
     steps:
@@ -93,5 +93,5 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*
-            artifacts/oas_atlas.demo.db
+            artifacts/mneme.demo.db
             artifacts/stats.json

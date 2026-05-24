@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from oas_atlas.index.db import AtlasDB, row_to_operation_dict
-from oas_atlas.util import to_fts_query, tokenize_for_fts
+from mneme.index.db import MnemeDB, row_to_operation_dict
+from mneme.util import to_fts_query, tokenize_for_fts
 
 
 @dataclass(slots=True)
@@ -15,7 +15,7 @@ class SearchFilters:
 
 
 def search_operations(
-    db: AtlasDB,
+    db: MnemeDB,
     query: str,
     *,
     limit: int = 10,
