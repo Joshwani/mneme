@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+- MCP tool `index_openapi_url` — fetch and index a remote OpenAPI spec URL (equivalent to `mneme add-spec`).
+
 ## [0.3.0] - unreleased
 
 ### Added

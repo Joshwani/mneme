@@ -6,6 +6,7 @@ from typing import Any
 from mneme.auth import list_auth_profiles, load_auth_profiles
 from mneme.http_client import CallInputs, execute_operation_call, prepare_operation_call
 from mneme.index.db import MnemeDB, default_db_path
+from mneme.index.ingest import IngestError, ingest_url
 from mneme.index.search import (
     ALL_KINDS,
     CallableFilters,
@@ -275,6 +276,22 @@ def create_mcp_server(
             stats = db.stats()
             stats["auth_config_present"] = bool(load_auth_profiles(auth_config))
             return stats
+        finally:
+            db.close()
+
+    @mcp.tool()
+    def index_openapi_url(url: str) -> dict[str, Any]:
+        """Fetch and index one remote OpenAPI/Swagger spec URL into the local Mneme database.
+
+        Use when the user asks to add, index, or ingest an API spec. After indexing,
+        use search_operations to find operations. Returns spec_id, operation count, and title.
+        """
+
+        db = MnemeDB(db_path)
+        try:
+            return ingest_url(db, url, discovered_via="mcp")
+        except IngestError as exc:
+            raise ValueError(str(exc)) from exc
         finally:
             db.close()
 
