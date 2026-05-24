@@ -92,5 +92,7 @@ def tokenize_for_fts(query: str, max_terms: int = 24) -> list[str]:
 
 def to_fts_query(query: str) -> str:
     terms = tokenize_for_fts(query)
-    # OR is intentionally recall-heavy. Agents can rerank or request larger top-k.
-    return " OR ".join(f'"{term}"' for term in terms)
+    # OR is intentionally recall-heavy. The trailing ``*`` enables FTS5 prefix
+    # matching so "greet" finds "greet", "greeting", "greetings". Agents can
+    # rerank or request larger top-k.
+    return " OR ".join(f'"{term}"*' for term in terms)

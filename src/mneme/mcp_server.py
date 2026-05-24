@@ -6,7 +6,13 @@ from typing import Any
 from mneme.auth import list_auth_profiles, load_auth_profiles
 from mneme.http_client import CallInputs, execute_operation_call, prepare_operation_call
 from mneme.index.db import MnemeDB, default_db_path
-from mneme.index.search import SearchFilters, search_operations as search_index_operations
+from mneme.index.search import (
+    ALL_KINDS,
+    CallableFilters,
+    SearchFilters,
+    search_callables as search_index_callables,
+    search_operations as search_index_operations,
+)
 from mneme.memory.db import NotesDB, default_notes_db_path
 from mneme.memory.notes import (
     add_note as _add_note,
@@ -192,6 +198,73 @@ def create_mcp_server(
             confirm=confirm,
             dry_run=dry_run,
         )
+
+    @mcp.tool()
+    def search_callables(
+        query: str,
+        limit: int = 10,
+        kinds: list[str] | None = None,
+        provider_domain: str | None = None,
+        method: str | None = None,
+        auth_required: bool | None = None,
+        language: str | None = None,
+        package_name: str | None = None,
+        token_budget: int | None = 4000,
+    ) -> dict[str, Any]:
+        """Unified search across HTTP operations and library symbols.
+
+        Returns a mixed list ranked by BM25. Each hit has a ``kind`` field of
+        'http_operation', 'pylib_symbol', or 'jslib_symbol'. Use ``kinds`` to
+        restrict to a subset. For HTTP-only behavior, use search_operations.
+        """
+
+        kind_tuple: tuple[str, ...] | None = None
+        if kinds:
+            invalid = [k for k in kinds if k not in ALL_KINDS]
+            if invalid:
+                raise ValueError(f"unknown kinds: {invalid}. Allowed: {', '.join(ALL_KINDS)}")
+            kind_tuple = tuple(kinds)
+        db = MnemeDB(db_path)
+        try:
+            return search_index_callables(
+                db,
+                query,
+                limit=max(1, min(int(limit), 50)),
+                filters=CallableFilters(
+                    kinds=kind_tuple,
+                    provider_domain=provider_domain,
+                    method=method,
+                    auth_required=auth_required,
+                    language=language,
+                    package_name=package_name,
+                ),
+                token_budget=token_budget,
+            )
+        finally:
+            db.close()
+
+    @mcp.tool()
+    def get_library_symbol(symbol_id: str) -> dict[str, Any]:
+        """Return the normalized library symbol card for a symbol_id."""
+
+        db = MnemeDB(db_path)
+        try:
+            sym = db.get_library_symbol(symbol_id)
+        finally:
+            db.close()
+        if sym is None:
+            raise ValueError(f"symbol not found: {symbol_id}")
+        return sym
+
+    @mcp.tool()
+    def list_libraries(language: str | None = None) -> dict[str, Any]:
+        """List indexed library packages, optionally filtered by language."""
+
+        db = MnemeDB(db_path)
+        try:
+            return {"packages": db.list_library_packages(language=language)}
+        finally:
+            db.close()
 
     @mcp.tool()
     def mneme_stats() -> dict[str, Any]:

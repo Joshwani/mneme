@@ -98,6 +98,62 @@ CREATE INDEX IF NOT EXISTS idx_operations_spec_id ON operations(spec_id);
 CREATE INDEX IF NOT EXISTS idx_operations_provider_domain ON operations(provider_domain);
 CREATE INDEX IF NOT EXISTS idx_operations_method ON operations(method);
 CREATE INDEX IF NOT EXISTS idx_operations_path ON operations(path);
+
+CREATE TABLE IF NOT EXISTS library_packages (
+  package_id TEXT PRIMARY KEY,
+  language TEXT NOT NULL,
+  name TEXT NOT NULL,
+  version TEXT,
+  source TEXT NOT NULL,
+  source_url TEXT,
+  homepage TEXT,
+  summary TEXT,
+  fetched_at TEXT NOT NULL,
+  content_hash TEXT,
+  status TEXT NOT NULL DEFAULT 'ok',
+  error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS library_symbols (
+  symbol_id TEXT PRIMARY KEY,
+  package_id TEXT NOT NULL REFERENCES library_packages(package_id) ON DELETE CASCADE,
+  language TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  package_name TEXT NOT NULL,
+  module_path TEXT NOT NULL,
+  qualified_name TEXT NOT NULL,
+  symbol_name TEXT NOT NULL,
+  signature TEXT,
+  summary TEXT,
+  description TEXT,
+  parameters TEXT NOT NULL DEFAULT '[]',
+  returns TEXT,
+  tags TEXT NOT NULL DEFAULT '[]',
+  agent_text TEXT NOT NULL,
+  source_url TEXT,
+  quality_score REAL NOT NULL DEFAULT 0.0,
+  fetched_at TEXT NOT NULL
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS library_symbols_fts USING fts5(
+  symbol_id UNINDEXED,
+  package_id UNINDEXED,
+  language UNINDEXED,
+  package_name,
+  module_path,
+  qualified_name,
+  symbol_name,
+  signature,
+  summary,
+  description,
+  tags,
+  agent_text
+);
+
+CREATE INDEX IF NOT EXISTS idx_library_symbols_package_id ON library_symbols(package_id);
+CREATE INDEX IF NOT EXISTS idx_library_symbols_language ON library_symbols(language);
+CREATE INDEX IF NOT EXISTS idx_library_symbols_package_name ON library_symbols(package_name);
+CREATE INDEX IF NOT EXISTS idx_library_symbols_kind ON library_symbols(kind);
 """
 
 
@@ -273,13 +329,154 @@ class MnemeDB:
         providers = self.conn.execute(
             "SELECT COUNT(DISTINCT provider_domain) FROM operations WHERE provider_domain IS NOT NULL"
         ).fetchone()[0]
+        libraries = self.conn.execute(
+            "SELECT COUNT(*) FROM library_packages WHERE status = 'ok'"
+        ).fetchone()[0]
+        library_symbols = self.conn.execute("SELECT COUNT(*) FROM library_symbols").fetchone()[0]
+        by_language = {}
+        for row in self.conn.execute(
+            "SELECT language, COUNT(*) AS n FROM library_symbols GROUP BY language"
+        ):
+            by_language[row["language"]] = int(row["n"])
         return {
             "db_path": str(self.path),
             "specs": specs,
             "failed_specs": errors,
             "operations": operations,
             "providers": providers,
+            "libraries": libraries,
+            "library_symbols": library_symbols,
+            "library_symbols_by_language": by_language,
         }
+
+    def upsert_library_package(self, *, package: dict[str, Any]) -> None:
+        """Insert or replace a library package row."""
+
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO library_packages (
+                  package_id, language, name, version, source, source_url, homepage,
+                  summary, fetched_at, content_hash, status, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok', NULL)
+                ON CONFLICT(package_id) DO UPDATE SET
+                  language=excluded.language,
+                  name=excluded.name,
+                  version=excluded.version,
+                  source=excluded.source,
+                  source_url=excluded.source_url,
+                  homepage=excluded.homepage,
+                  summary=excluded.summary,
+                  fetched_at=excluded.fetched_at,
+                  content_hash=excluded.content_hash,
+                  status='ok',
+                  error=NULL
+                """,
+                (
+                    package["package_id"],
+                    package["language"],
+                    package["name"],
+                    package.get("version"),
+                    package["source"],
+                    package.get("source_url"),
+                    package.get("homepage"),
+                    package.get("summary"),
+                    package["fetched_at"],
+                    package.get("content_hash"),
+                ),
+            )
+
+    def replace_library_symbols(self, *, package_id: str, symbols: Iterable[dict[str, Any]]) -> int:
+        """Replace all indexed symbols for a package atomically. Returns the new count."""
+
+        symbols_list = list(symbols)
+        with self.conn:
+            self.conn.execute("DELETE FROM library_symbols_fts WHERE package_id = ?", (package_id,))
+            self.conn.execute("DELETE FROM library_symbols WHERE package_id = ?", (package_id,))
+            for sym in symbols_list:
+                self._insert_library_symbol(sym)
+        return len(symbols_list)
+
+    def _insert_library_symbol(self, sym: dict[str, Any]) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO library_symbols (
+              symbol_id, package_id, language, kind, package_name, module_path,
+              qualified_name, symbol_name, signature, summary, description,
+              parameters, returns, tags, agent_text, source_url, quality_score, fetched_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                sym["symbol_id"],
+                sym["package_id"],
+                sym["language"],
+                sym["kind"],
+                sym["package_name"],
+                sym["module_path"],
+                sym["qualified_name"],
+                sym["symbol_name"],
+                sym.get("signature"),
+                sym.get("summary"),
+                sym.get("description"),
+                json_dumps_compact(sym.get("parameters") or []),
+                json_dumps_compact(sym.get("returns")) if sym.get("returns") is not None else None,
+                json_dumps_compact(sym.get("tags") or []),
+                sym["agent_text"],
+                sym.get("source_url"),
+                float(sym.get("quality_score", 0.0)),
+                sym["fetched_at"],
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO library_symbols_fts (
+              symbol_id, package_id, language, package_name, module_path,
+              qualified_name, symbol_name, signature, summary, description, tags, agent_text
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                sym["symbol_id"],
+                sym["package_id"],
+                sym["language"],
+                sym["package_name"],
+                sym["module_path"],
+                sym["qualified_name"],
+                sym["symbol_name"],
+                sym.get("signature") or "",
+                sym.get("summary") or "",
+                sym.get("description") or "",
+                " ".join(sym.get("tags") or []),
+                sym["agent_text"],
+            ),
+        )
+
+    def get_library_symbol(self, symbol_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM library_symbols WHERE symbol_id = ?", (symbol_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return row_to_library_symbol_dict(row)
+
+    def get_library_package(self, package_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM library_packages WHERE package_id = ?", (package_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def list_library_packages(self, *, language: str | None = None) -> list[dict[str, Any]]:
+        if language:
+            cur = self.conn.execute(
+                "SELECT * FROM library_packages WHERE language = ? AND status = 'ok' ORDER BY name",
+                (language,),
+            )
+        else:
+            cur = self.conn.execute(
+                "SELECT * FROM library_packages WHERE status = 'ok' ORDER BY language, name"
+            )
+        return [dict(r) for r in cur.fetchall()]
 
 
 def row_to_operation_dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -292,6 +489,17 @@ def row_to_operation_dict(row: sqlite3.Row) -> dict[str, Any]:
         ("request_body", None),
         ("responses", {}),
         ("spec_slice", {}),
+    ]:
+        data[key] = json_loads_maybe(data.get(key), default)
+    return data
+
+
+def row_to_library_symbol_dict(row: sqlite3.Row) -> dict[str, Any]:
+    data = dict(row)
+    for key, default in [
+        ("parameters", []),
+        ("returns", None),
+        ("tags", []),
     ]:
         data[key] = json_loads_maybe(data.get(key), default)
     return data

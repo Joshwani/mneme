@@ -13,8 +13,11 @@ Mneme (the Greek muse of memory) is a small, local-first indexer and search serv
 The searchable unit is **a callable** — not "an API" or "a library." That can be:
 
 - an OpenAPI operation (e.g., `POST /v1/refunds`),
-- a library symbol (e.g., `matplotlib.pyplot.bar`) — *coming in 0.3*,
-- a saved note in the agent's persistent memory — *coming in 0.3*.
+- a Python library symbol (e.g., `matplotlib.pyplot.bar`),
+- a JavaScript/TypeScript library symbol (e.g., `axios.create`),
+- a saved note in the agent's persistent memory.
+
+All four live in the same SQLite + FTS5 index and are searchable from one MCP tool (`search_callables`).
 
 ## Quickstart in 60 seconds
 
@@ -75,10 +78,13 @@ flowchart LR
 ## New in 0.3
 
 - **Agent memory.** A searchable notebook (FTS5-backed) plus an opt-in scoped file workspace for persisting notes, snippets, and small artifacts across MCP sessions. Stored in a separate `notes.db`. See [Memory](#memory-notebook--workspace) below.
+- **Library indexing.** `mneme add-pylib <package>` ingests a Python package's public symbols via `griffe` (static analysis, no execution). `mneme add-jslib --package <name> --file <path>.d.ts` ingests a TypeScript declaration file via tree-sitter. Library symbols are searchable side-by-side with HTTP operations via the unified `search_callables` tool. See [Library indexing](#library-indexing-python--jsts) below.
 
 ## What's coming next
 
-- **Library indexing.** `mneme add-pylib <name>` (Python, via `griffe`) and `mneme add-jslib <name>` (JavaScript/TypeScript, via `.d.ts` parsing). Library symbols are searchable side-by-side with HTTP operations.
+- Library indexing from npm tarballs (right now you supply a local `.d.ts` file).
+- Library indexing from PyPI sdists/wheels (right now the package must already be installed or be a local source directory).
+- Hybrid retrieval (BM25 + embeddings) for callable search.
 
 ## Install
 
@@ -132,6 +138,14 @@ mneme workspace-enable --scope notes --max-mb 10
 mneme workspace-write --scope notes --path a.md --content "..."
 mneme workspace-ls --scope notes
 
+# library indexing
+mneme add-pylib httpx                             # an installed package
+mneme add-pylib mymod --source-dir ./src          # a local source tree
+mneme add-jslib --package axios --file ./axios.d.ts
+mneme list-libraries
+mneme search-callables "create a request"
+mneme search-callables "send" --kind pylib_symbol --kind jslib_symbol
+
 # serve / run as MCP
 mneme serve --host 127.0.0.1 --port 8080
 mneme mcp-server
@@ -164,8 +178,13 @@ mneme mcp-server --transport streamable-http
 Tools exposed:
 
 ```text
+# Unified callable search (HTTP + library symbols)
+search_callables           # unified search; restrict via kinds=[...]
+get_library_symbol         # full symbol card for a symbol_id
+list_libraries             # list indexed library packages
+
 # OpenAPI / HTTP
-search_operations          # natural-language operation search
+search_operations          # HTTP-only operation search
 get_operation              # full normalized operation card
 get_spec_slice             # minimal OpenAPI-style operation slice
 get_call_template          # non-executing request template
@@ -189,8 +208,6 @@ workspace_read             # read a file in a scope
 workspace_write            # write a file in a scope (must be enabled first)
 workspace_rm               # remove a file in a scope
 ```
-
-Library-symbol tools (`pylib_*`, `jslib_*`) land in a follow-up release.
 
 Print a paste-ready config for your client:
 
@@ -329,6 +346,60 @@ GET  /operations/{operation_id}/spec-slice
 GET  /operations/{operation_id}/call-template
 POST /operations/{operation_id}/prepare-call
 POST /operations/{operation_id}/execute-call
+```
+
+## Library indexing (Python + JS/TS)
+
+Mneme can index callables that aren't HTTP operations. Library symbols (functions, classes, methods, interfaces, type aliases, enums) live in the same SQLite + FTS5 index and surface in `search_callables` results with `kind="pylib_symbol"` or `kind="jslib_symbol"`.
+
+### Python via `griffe`
+
+```bash
+pip install 'mneme-server[pylib]'
+
+# Index an installed package
+mneme add-pylib httpx
+
+# Index a checked-out source tree
+mneme add-pylib mymod --source-dir ./src
+
+mneme list-libraries
+mneme search-callables "create a request" --language python
+```
+
+Implementation notes:
+
+- We use [`griffe`](https://mkdocstrings.github.io/griffe/) for **static analysis** — Mneme never imports or executes user code.
+- The package must be installed in the current Python environment, or a `--source-dir` must be provided.
+- Private names (`_foo`, `_Bar`) and dunder names (`__init__`, `__repr__`) are skipped.
+
+### JavaScript / TypeScript via `.d.ts`
+
+```bash
+pip install 'mneme-server[jslib]'
+
+mneme add-jslib --package axios --file ./node_modules/axios/index.d.ts
+mneme add-jslib --package @types/node --file ./node_modules/@types/node/fs.d.ts
+mneme search-callables "axios.create"
+```
+
+Implementation notes:
+
+- We use `tree-sitter-typescript` to parse `.d.ts` files. No `node`/`npm` is required at runtime.
+- Currently you supply a local `.d.ts` file. Pulling tarballs from npm registry is a follow-up.
+- Captured kinds: `function`, `class` (+ its `method`s), `interface`, `type`, `enum`.
+- JSDoc comments immediately preceding a declaration are captured as the docstring; `@param`/`@returns` tags are preserved in the description but not yet parsed structurally.
+
+### Unified search
+
+`search_callables` returns a mixed list of hits ranked by BM25 with structural bonuses. Each hit has a `kind` field. Common filters:
+
+```bash
+mneme search-callables "create a refund"                         # all kinds
+mneme search-callables "create a refund" --kind http_operation   # HTTP only
+mneme search-callables "axios" --kind jslib_symbol               # JS/TS only
+mneme search-callables "DataFrame" --language python             # Python lib only
+mneme search-callables "post" --package httpx                    # one Python pkg
 ```
 
 ## Memory: notebook + workspace

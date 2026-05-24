@@ -177,8 +177,58 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_notes_parsers(sub)
     _add_workspace_parsers(sub)
+    _add_library_parsers(sub)
 
     return parser
+
+
+def _add_library_parsers(sub: argparse._SubParsersAction) -> None:
+    pylib = sub.add_parser(
+        "add-pylib",
+        help="Index a Python library's symbols (callables) via static analysis",
+    )
+    pylib.add_argument("package")
+    pylib.add_argument("--version", default=None, help="Override the resolved version label")
+    pylib.add_argument(
+        "--source-dir",
+        default=None,
+        help="Index from a local checked-out source directory instead of an installed package",
+    )
+    pylib.set_defaults(func=cmd_add_pylib)
+
+    jslib = sub.add_parser(
+        "add-jslib",
+        help="Index a JavaScript/TypeScript library from a local .d.ts file",
+    )
+    jslib.add_argument("--package", required=True, help="Package name as used in imports")
+    jslib.add_argument("--file", required=True, help="Path to the .d.ts (or .ts) file")
+    jslib.add_argument("--version", default=None)
+    jslib.add_argument("--module-path", default=None, help="Override module path")
+    jslib.set_defaults(func=cmd_add_jslib)
+
+    libs = sub.add_parser("list-libraries", help="List indexed library packages")
+    libs.add_argument("--language", default=None, choices=["python", "typescript", "javascript"])
+    libs.add_argument("--json", action="store_true")
+    libs.set_defaults(func=cmd_list_libraries)
+
+    search = sub.add_parser(
+        "search-callables",
+        help="Unified search across HTTP operations and library symbols",
+    )
+    search.add_argument("query")
+    search.add_argument(
+        "--kind",
+        action="append",
+        default=None,
+        help="Restrict to one or more kinds: http_operation, pylib_symbol, jslib_symbol. Repeatable.",
+    )
+    search.add_argument("--limit", type=int, default=10)
+    search.add_argument("--provider-domain", default=None)
+    search.add_argument("--method", default=None)
+    search.add_argument("--language", default=None)
+    search.add_argument("--package", default=None)
+    search.add_argument("--json", action="store_true")
+    search.set_defaults(func=cmd_search_callables)
 
 
 def _add_notes_parsers(sub: argparse._SubParsersAction) -> None:
@@ -967,6 +1017,111 @@ def cmd_workspace_rm(args: argparse.Namespace) -> int:
     else:
         print("removed" if removed else "no such file")
     return 0 if removed else 1
+
+
+def cmd_add_pylib(args: argparse.Namespace) -> int:
+    from mneme.library.python import ingest_python_distribution, ingest_python_package
+
+    db = MnemeDB(args.db)
+    try:
+        if args.source_dir:
+            result = ingest_python_distribution(
+                db, args.package, source_dir=args.source_dir, version=args.version
+            )
+        else:
+            result = ingest_python_package(db, args.package, version=args.version)
+        print(pretty_json(result))
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_add_jslib(args: argparse.Namespace) -> int:
+    from mneme.library.typescript import ingest_dts_file
+
+    db = MnemeDB(args.db)
+    try:
+        result = ingest_dts_file(
+            db,
+            package_name=args.package,
+            path=args.file,
+            version=args.version,
+            module_path=args.module_path,
+        )
+        print(pretty_json(result))
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_list_libraries(args: argparse.Namespace) -> int:
+    db = MnemeDB(args.db)
+    try:
+        packages = db.list_library_packages(language=args.language)
+    finally:
+        db.close()
+    if args.json:
+        print(pretty_json(packages))
+        return 0
+    if not packages:
+        print("(no libraries indexed)")
+        return 0
+    for p in packages:
+        version = p.get("version") or "?"
+        print(f"  {p['language']:<10} {p['name']:<24} {version:<14} fetched={p['fetched_at']}")
+    return 0
+
+
+def cmd_search_callables(args: argparse.Namespace) -> int:
+    from mneme.index.search import (
+        ALL_KINDS,
+        CallableFilters,
+        search_callables,
+    )
+
+    db = MnemeDB(args.db)
+    try:
+        kinds: tuple[str, ...] | None = None
+        if args.kind:
+            invalid = [k for k in args.kind if k not in ALL_KINDS]
+            if invalid:
+                raise ValueError(f"unknown kinds: {invalid}. Allowed: {', '.join(ALL_KINDS)}")
+            kinds = tuple(args.kind)
+
+        result = search_callables(
+            db,
+            args.query,
+            limit=args.limit,
+            filters=CallableFilters(
+                kinds=kinds,
+                provider_domain=args.provider_domain,
+                method=args.method,
+                language=args.language,
+                package_name=args.package,
+            ),
+        )
+    finally:
+        db.close()
+    if args.json:
+        print(pretty_json(result))
+        return 0
+    hits = result.get("results", [])
+    if not hits:
+        print("(no matches)")
+        return 0
+    for hit in hits:
+        kind = hit.get("kind")
+        if kind == "http_operation":
+            print(
+                f"  [{kind}]  {hit.get('method')} {hit.get('path')}  ({hit.get('api_title')})"
+                f"  score={hit.get('score')}"
+            )
+        else:
+            print(
+                f"  [{kind}]  {hit.get('qualified_name')}  "
+                f"{hit.get('signature') or ''}  score={hit.get('score')}"
+            )
+    return 0
 
 
 if __name__ == "__main__":

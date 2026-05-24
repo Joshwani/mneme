@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on 
 ## [0.3.0] - unreleased
 
 ### Added
+- **Library indexing.** Python and JavaScript/TypeScript library symbols can now be indexed alongside HTTP operations and surface in unified search.
+  - `mneme add-pylib <package>` — index a Python package's public symbols via `griffe` (pure static analysis, no execution). Either an installed package or a local source directory (via `--source-dir`).
+  - `mneme add-jslib --package <name> --file <path>.d.ts` — index a TypeScript declaration file via `tree-sitter-typescript`. Captures functions, classes (and their methods), interfaces, type aliases, and enums.
+  - `mneme list-libraries [--language python|typescript]` — list indexed packages.
+  - `mneme search-callables <query>` — unified search across HTTP operations and library symbols. Filterable by `--kind`, `--language`, `--package`, `--provider-domain`, `--method`.
+  - MCP tools: `search_callables`, `get_library_symbol`, `list_libraries`. The existing `search_operations` continues to work HTTP-only.
+  - New schema: `library_packages` table, `library_symbols` table, `library_symbols_fts` virtual table; existing `operations` schema is unchanged.
+  - New optional extras: `mneme-server[pylib]` (griffe), `mneme-server[jslib]` (tree-sitter), `mneme-server[libraries]` (both).
 - **Persistent agent memory.** Two new primitives stored in a separate `notes.db`:
   - **Notebook.** A SQLite + FTS5-backed scratch pad. CLI: `mneme notes-add | notes-search | notes-get | notes-list | notes-update | notes-delete`. MCP tools: `notes_add`, `notes_search`, `notes_get`, `notes_list`, `notes_update`, `notes_delete`. Microsecond-resolution timestamps for stable ordering. Notes support free-text scope and tag filtering.
   - **Scoped file workspace.** Opt-in, per-scope filesystem area for snippets and small artifacts. CLI: `mneme workspace-{status,enable,disable,ls,read,write,rm}`. MCP tools: `workspace_status`, `workspace_ls`, `workspace_read`, `workspace_write`, `workspace_rm`. Disabled by default; the agent cannot create scopes via MCP. Path traversal, symlink, per-file, and per-scope quota safety invariants enforced in code and tested.
@@ -15,6 +23,8 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Changed
 - **Renamed the project from "OAS Atlas" to "Mneme".** Mneme is the Greek muse of memory; the new name better fits the broader scope (OpenAPI operations, library symbols, and persistent agent memory).
+- FTS5 queries now use prefix matching (`"term"*`), so a search for `greet` also finds `greeting` and `greetings`. Strict increase in recall; no impact on previously matching queries.
+- Search results now include a `kind` field (`http_operation`, `pylib_symbol`, or `jslib_symbol`) and a `callable_id` alias alongside the legacy `operation_id` for HTTP operations.
   - Python package: `oas-atlas` -> `mneme-server` (the PyPI distribution name is qualified because the bare `mneme` slug is held by an abandoned 2014 package).
   - Python import: `oas_atlas` -> `mneme`.
   - CLI binary: `oas-atlas` -> `mneme`.
