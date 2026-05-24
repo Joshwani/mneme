@@ -8,7 +8,7 @@
 
 **A self-hosted catalog of callables and persistent memory for AI agents.**
 
-Mneme (the Greek muse of memory) is a small, local-first indexer and search service that an LLM agent can consult to find the right HTTP API operation, library symbol, or saved note — and then retrieve a minimal slice instead of dumping everything into context. The package is published on PyPI as [`mneme-server`](https://pypi.org/project/mneme-server/); the CLI is `mneme`.
+Mneme is a small, local-first indexer and search service that an LLM agent can consult to find the right HTTP API operation, library symbol, or saved note — and then retrieve a minimal slice instead of dumping everything into context. The package is published on PyPI as [`mneme-server`](https://pypi.org/project/mneme-server/); the CLI is `mneme`.
 
 The searchable unit is **a callable** — not "an API" or "a library." That can be:
 
