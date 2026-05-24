@@ -72,9 +72,12 @@ flowchart LR
 - A local MCP server with search, spec retrieval, auth-aware request preparation, and guarded HTTP execution.
 - Docker Compose, systemd, cron, and GitHub Actions examples.
 
-## What's coming in 0.3
+## New in 0.3
 
-- **Agent memory.** A searchable notebook (FTS5-backed) plus an opt-in scoped file workspace for persisting notes, snippets, and small artifacts across MCP sessions. Stored in a separate `notes.db`.
+- **Agent memory.** A searchable notebook (FTS5-backed) plus an opt-in scoped file workspace for persisting notes, snippets, and small artifacts across MCP sessions. Stored in a separate `notes.db`. See [Memory](#memory-notebook--workspace) below.
+
+## What's coming next
+
 - **Library indexing.** `mneme add-pylib <name>` (Python, via `griffe`) and `mneme add-jslib <name>` (JavaScript/TypeScript, via `.d.ts` parsing). Library symbols are searchable side-by-side with HTTP operations.
 
 ## Install
@@ -119,6 +122,16 @@ mneme search "create refund" --method POST --provider-domain api.stripe.com
 mneme stats
 mneme doctor
 
+# memory: notebook
+mneme notes-add --title "T" --body "B" --tag x
+mneme notes-search "query"
+mneme notes-list
+
+# memory: scoped file workspace (must enable first)
+mneme workspace-enable --scope notes --max-mb 10
+mneme workspace-write --scope notes --path a.md --content "..."
+mneme workspace-ls --scope notes
+
 # serve / run as MCP
 mneme serve --host 127.0.0.1 --port 8080
 mneme mcp-server
@@ -151,6 +164,7 @@ mneme mcp-server --transport streamable-http
 Tools exposed:
 
 ```text
+# OpenAPI / HTTP
 search_operations          # natural-language operation search
 get_operation              # full normalized operation card
 get_spec_slice             # minimal OpenAPI-style operation slice
@@ -159,9 +173,24 @@ list_local_auth_profiles   # local auth profiles without secrets
 prepare_http_call          # redacted prepared request, no network traffic
 execute_http_call          # dry-run by default; real calls require confirm=true
 mneme_stats                # local index stats
+
+# Memory: notebook
+notes_search               # full-text search the agent's notebook
+notes_get                  # fetch a note by ID
+notes_list                 # list recent notes, optionally by scope/tag
+notes_add                  # add a new note
+notes_update               # update an existing note
+notes_delete               # delete a note
+
+# Memory: scoped file workspace (off by default)
+workspace_status           # list enabled scopes and current usage
+workspace_ls               # list files in a scope
+workspace_read             # read a file in a scope
+workspace_write            # write a file in a scope (must be enabled first)
+workspace_rm               # remove a file in a scope
 ```
 
-Memory tools (`notes_*`, `workspace_*`) and library-symbol tools land in 0.3.
+Library-symbol tools (`pylib_*`, `jslib_*`) land in a follow-up release.
 
 Print a paste-ready config for your client:
 
@@ -302,16 +331,76 @@ POST /operations/{operation_id}/prepare-call
 POST /operations/{operation_id}/execute-call
 ```
 
+## Memory: notebook + workspace
+
+Mneme exposes two memory primitives to an agent. Both live in a separate `notes.db` so you can back up, sync, or wipe your agent memory without touching the API catalog.
+
+### Notebook
+
+A persistent, FTS5-searchable scratch pad. The agent (or you) saves short notes — design decisions, gotchas, "here's the call that works." Later, the agent searches its own notebook to recall context.
+
+```bash
+mneme notes-add --title "Stripe refund flow" \
+  --body "POST /v1/refunds needs payment_id, amount. 25h refund window." \
+  --tag stripe --tag payments
+
+mneme notes-search refund
+mneme notes-list --scope finops
+mneme notes-get note_<id>
+mneme notes-update note_<id> --body "New body"
+mneme notes-delete note_<id>
+```
+
+Notes have optional `tags`, an optional `scope` (free-text grouping like a project name or task ID), and microsecond-resolution timestamps for stable ordering.
+
+### Scoped file workspace (off by default)
+
+A small, opt-in directory the agent can read and write within. Useful for snippets, generated config, scratch artifacts that should persist across MCP sessions. **The workspace is OFF until you explicitly enable a scope**, and the agent cannot create new scopes via MCP.
+
+```bash
+mneme workspace-enable --scope notes --max-mb 10
+mneme workspace-write --scope notes --path daily.md --content "## 2026-05-24"
+mneme workspace-ls --scope notes
+mneme workspace-read --scope notes --path daily.md
+mneme workspace-rm --scope notes --path daily.md
+mneme workspace-disable --scope notes              # keeps files on disk
+mneme workspace-disable --scope notes --remove-files
+```
+
+Safety invariants:
+
+- scopes must match `[a-zA-Z0-9_][a-zA-Z0-9_.\-]{0,63}`;
+- paths cannot escape the scope directory (`..` segments and symlinks are rejected);
+- per-file size limit (1 MiB default);
+- per-scope quota (10 MiB default, configurable via `--max-mb`);
+- the agent cannot enable or disable scopes through MCP — only the human operator can.
+
 ## Database location
 
-Mneme picks a sensible default path so commands work without `--db`:
+Mneme picks sensible default paths so commands work without `--db`:
+
+OpenAPI/library index:
 
 1. `$MNEME_DB` if set
 2. `$XDG_DATA_HOME/mneme/mneme.db` if set
 3. `~/.local/share/mneme/mneme.db` on Linux/macOS
 4. `%LOCALAPPDATA%\mneme\mneme.db` on Windows
 
-Override at any time with `--db /path/to/mneme.db`.
+Notes index (separate file):
+
+1. `$MNEME_NOTES_DB` if set
+2. `$XDG_DATA_HOME/mneme/notes.db` if set
+3. `~/.local/share/mneme/notes.db` on Linux/macOS
+4. `%LOCALAPPDATA%\mneme\notes.db` on Windows
+
+Workspace root (one directory per enabled scope under it):
+
+1. `$MNEME_WORKSPACE_ROOT` if set
+2. `$XDG_DATA_HOME/mneme/workspace/` if set
+3. `~/.local/share/mneme/workspace/` on Linux/macOS
+4. `%LOCALAPPDATA%\mneme\workspace\` on Windows
+
+Override the index path with `--db /path/to/mneme.db` and the notes index with `--notes-db /path/to/notes.db` on memory subcommands.
 
 ## Self-host with Docker Compose
 

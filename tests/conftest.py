@@ -18,6 +18,8 @@ def _isolate_mneme_env(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MNEME_AUTH_CONFIG", str(tmp_path / "auth.absent.json"))
     monkeypatch.setenv("MNEME_DB", str(tmp_path / "mneme.db"))
+    monkeypatch.setenv("MNEME_NOTES_DB", str(tmp_path / "notes.db"))
+    monkeypatch.setenv("MNEME_WORKSPACE_ROOT", str(tmp_path / "workspace"))
     monkeypatch.delenv("MNEME_HTTP_ALLOW_HOSTS", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     os.makedirs(tmp_path, exist_ok=True)

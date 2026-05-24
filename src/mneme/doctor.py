@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from mneme.index.db import MnemeDB, default_db_path
+from mneme.memory.db import default_notes_db_path
 
 
 def _module_info(module_name: str, distribution: str | None = None) -> dict[str, Any]:
@@ -71,6 +72,10 @@ def collect(db_path: str | None = None) -> dict[str, Any]:
         except Exception as exc:
             db_open_error = str(exc)
 
+    notes_db_path = Path(default_notes_db_path()).expanduser()
+    notes_db_exists = notes_db_path.exists()
+    notes_db_size = notes_db_path.stat().st_size if notes_db_exists else None
+
     return {
         "mneme": _module_info("mneme", "mneme-server"),
         "python": {
@@ -86,6 +91,8 @@ def collect(db_path: str | None = None) -> dict[str, Any]:
         "cli_on_path": shutil.which("mneme") or None,
         "env": {
             "MNEME_DB": os.environ.get("MNEME_DB"),
+            "MNEME_NOTES_DB": os.environ.get("MNEME_NOTES_DB"),
+            "MNEME_WORKSPACE_ROOT": os.environ.get("MNEME_WORKSPACE_ROOT"),
             "MNEME_AUTH_CONFIG": os.environ.get("MNEME_AUTH_CONFIG"),
             "MNEME_HTTP_ALLOW_HOSTS": os.environ.get("MNEME_HTTP_ALLOW_HOSTS"),
             "XDG_DATA_HOME": os.environ.get("XDG_DATA_HOME"),
@@ -96,6 +103,11 @@ def collect(db_path: str | None = None) -> dict[str, Any]:
             "size_bytes": db_size,
             "stats": stats,
             "open_error": db_open_error,
+        },
+        "notes_db": {
+            "path": str(notes_db_path),
+            "exists": notes_db_exists,
+            "size_bytes": notes_db_size,
         },
         "extras": {
             "mcp": _module_info("mcp"),

@@ -12,6 +12,16 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def utc_now_iso_us() -> str:
+    """ISO 8601 UTC timestamp with microsecond resolution.
+
+    Used by features (notes, workspace) where many writes can happen within
+    a single second and stable recency ordering matters.
+    """
+
+    return datetime.now(timezone.utc).isoformat()
+
+
 def sha256_hex(value: bytes | str) -> str:
     if isinstance(value, str):
         value = value.encode("utf-8")

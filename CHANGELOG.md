@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [0.3.0] - unreleased
 
+### Added
+- **Persistent agent memory.** Two new primitives stored in a separate `notes.db`:
+  - **Notebook.** A SQLite + FTS5-backed scratch pad. CLI: `mneme notes-add | notes-search | notes-get | notes-list | notes-update | notes-delete`. MCP tools: `notes_add`, `notes_search`, `notes_get`, `notes_list`, `notes_update`, `notes_delete`. Microsecond-resolution timestamps for stable ordering. Notes support free-text scope and tag filtering.
+  - **Scoped file workspace.** Opt-in, per-scope filesystem area for snippets and small artifacts. CLI: `mneme workspace-{status,enable,disable,ls,read,write,rm}`. MCP tools: `workspace_status`, `workspace_ls`, `workspace_read`, `workspace_write`, `workspace_rm`. Disabled by default; the agent cannot create scopes via MCP. Path traversal, symlink, per-file, and per-scope quota safety invariants enforced in code and tested.
+- New env vars: `MNEME_NOTES_DB`, `MNEME_WORKSPACE_ROOT`.
+- `doctor` now reports the notes DB path and size.
+
 ### Changed
 - **Renamed the project from "OAS Atlas" to "Mneme".** Mneme is the Greek muse of memory; the new name better fits the broader scope (OpenAPI operations, library symbols, and persistent agent memory).
   - Python package: `oas-atlas` -> `mneme-server` (the PyPI distribution name is qualified because the bare `mneme` slug is held by an abandoned 2014 package).
