@@ -250,7 +250,24 @@ def _walk_module(
     module_path: str,
     parent_qual: list[str],
     fetched_at: str,
+    visited_modules: set[str] | None = None,
+    visited_classes: set[str] | None = None,
+    is_class: bool = False,
 ) -> Iterable[dict[str, Any]]:
+    # ``visited_modules`` and ``visited_classes`` guard against cyclic
+    # re-exports. Large packages like matplotlib have submodule aliases
+    # (e.g. ``matplotlib.font_manager.mpl`` that resolves back to
+    # ``matplotlib``) and classes re-exported under many submodules. We dedup
+    # by canonical path so each module/class is walked once.
+    visited_modules = visited_modules if visited_modules is not None else set()
+    visited_classes = visited_classes if visited_classes is not None else set()
+    if not is_class:
+        canonical = getattr(module, "canonical_path", None) or getattr(module, "path", None)
+        module_key = canonical or f"id:{id(module)}"
+        if module_key in visited_modules:
+            return
+        visited_modules.add(module_key)
+
     members = getattr(module, "members", None) or {}
     for name, member in members.items():
         if _is_private(name):
@@ -268,30 +285,62 @@ def _walk_module(
                 fetched_at=fetched_at,
             )
         elif "class" in kind:
+            class_canonical = getattr(member, "canonical_path", None) or getattr(
+                member, "path", None
+            )
+            class_key = class_canonical or f"id:{id(member)}"
+            if class_key in visited_classes:
+                continue
+            visited_classes.add(class_key)
+            # Prefer the canonical module path so a class re-exported via
+            # ``samplepkg.Greeter`` is still indexed as ``samplepkg.core.Greeter``.
+            class_module_path = module_path
+            if (
+                class_canonical
+                and class_canonical.startswith(package_name + ".")
+                and "." in class_canonical
+            ):
+                class_module_path = class_canonical.rsplit(".", 1)[0]
             yield _normalize_class(
                 package_id=package_id,
                 package_name=package_name,
                 obj=member,
-                module_path=module_path,
+                module_path=class_module_path,
                 parent_qual=parent_qual,
                 fetched_at=fetched_at,
             )
-            # Walk methods inside the class.
             yield from _walk_module(
                 package_id=package_id,
                 package_name=package_name,
                 module=member,
-                module_path=module_path,
+                module_path=class_module_path,
                 parent_qual=parent_qual + [member.name],
                 fetched_at=fetched_at,
+                visited_modules=visited_modules,
+                visited_classes=visited_classes,
+                is_class=True,
             )
         elif "module" in kind:
-            child_module_path = f"{module_path}.{member.name}" if module_path else member.name
+            # Prefer the canonical Python path (e.g., ``matplotlib.axes``) over
+            # the path built by descending through import chains
+            # (e.g., ``matplotlib.legend_handler.mcoll.mcolorizer.axes``), so
+            # qualified names match what users would actually type to import.
+            child_canonical = getattr(member, "canonical_path", None) or getattr(
+                member, "path", None
+            )
+            if child_canonical and child_canonical.startswith(package_name + "."):
+                child_module_path = child_canonical
+            elif child_canonical == package_name:
+                child_module_path = package_name
+            else:
+                child_module_path = f"{module_path}.{member.name}" if module_path else member.name
             yield from _walk_module(
                 package_id=package_id,
                 package_name=package_name,
                 module=member,
                 module_path=child_module_path,
+                visited_modules=visited_modules,
+                visited_classes=visited_classes,
                 parent_qual=parent_qual,
                 fetched_at=fetched_at,
             )
@@ -355,19 +404,30 @@ def _ingest(
     if not source_dir and not any(p == "" for p in sys.path):
         sys.path.insert(0, "")
 
-    root = _load_griffe(package_name, source_dir)
-    package_id = stable_id("pkg", f"python|{package_name}|{resolved_version or ''}", length=16)
+    # Large packages (matplotlib, pandas) have legitimately deep module trees;
+    # bump the recursion limit defensively. We restore the prior limit when done.
+    prior_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(prior_limit, 10000))
+    try:
+        root = _load_griffe(package_name, source_dir)
+        package_id = stable_id("pkg", f"python|{package_name}|{resolved_version or ''}", length=16)
 
-    symbols = list(
-        _walk_module(
+        seen_ids: set[str] = set()
+        symbols: list[dict[str, Any]] = []
+        for card in _walk_module(
             package_id=package_id,
             package_name=package_name,
             module=root,
             module_path=package_name,
             parent_qual=[],
             fetched_at=fetched_at,
-        )
-    )
+        ):
+            if card["symbol_id"] in seen_ids:
+                continue
+            seen_ids.add(card["symbol_id"])
+            symbols.append(card)
+    finally:
+        sys.setrecursionlimit(prior_limit)
 
     db.upsert_library_package(
         package={

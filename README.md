@@ -8,18 +8,18 @@
 
 **A self-hosted catalog of callables and persistent memory for AI agents.**
 
-Mneme is a small, local-first indexer and search service that an LLM agent can consult to find the right HTTP API operation, library symbol, or saved note — and then retrieve a minimal slice instead of dumping everything into context. The package is published on PyPI as [`mneme-server`](https://pypi.org/project/mneme-server/); the CLI is `mneme`.
+Mneme is a small, local-first indexer and search service. An LLM agent consults it to find the right HTTP API operation, library symbol, or saved note, and then pulls a minimal slice instead of dumping entire docs into context. Published on PyPI as [`mneme-server`](https://pypi.org/project/mneme-server/); the CLI is `mneme`.
 
 The searchable unit is **a callable** — not "an API" or "a library." That can be:
 
 - an OpenAPI operation (e.g., `POST /v1/refunds`),
-- a Python library symbol (e.g., `matplotlib.pyplot.bar`),
+- a Python library symbol (e.g., `matplotlib.axes._axes.Axes.plot`),
 - a JavaScript/TypeScript library symbol (e.g., `axios.create`),
 - a saved note in the agent's persistent memory.
 
-All four live in the same SQLite + FTS5 index and are searchable from one MCP tool (`search_callables`).
+All four live in the same SQLite + FTS5 index and are searchable from one MCP tool: `search_callables`.
 
-## Quickstart in 60 seconds
+## Quickstart
 
 ```bash
 pip install mneme-server
@@ -30,81 +30,119 @@ mneme doctor                          # environment diagnostics
 
 The default index lives in a per-user directory (XDG-aware), so subsequent commands work without `--db`.
 
-> Want to see it on real APIs? `mneme crawl-seeds examples/seeds.popular.txt` will pull in GitHub, Stripe, Slack, DigitalOcean, Twilio, and others.
+Want it on real APIs? `mneme crawl-seeds examples/seeds.popular.txt` ingests GitHub, Stripe, Slack, DigitalOcean, Twilio, and others.
+
+## Live demo: build a strategy across two libraries
+
+This is what library indexing looks like end to end. Given `yfinance` (finance) and `matplotlib` (charting), an agent asks Mneme three small questions, then assembles a working SMA crossover chart for AAPL.
+
+```bash
+pip install 'mneme-server[pylib]' yfinance matplotlib
+
+mneme add-pylib yfinance       # 472 symbols  in ~0.3s
+mneme add-pylib matplotlib     # 6.6k symbols in ~3s
+
+mneme search-callables "download daily price history" --package yfinance --limit 3
+# →  yfinance.scrapers.history.PriceHistory.history(period, interval, start, end, ...) -> pd.DataFrame
+#    yfinance.download(tickers, start, end, auto_adjust, ...) -> pd.DataFrame
+#    yfinance.tickers.Tickers.download(...)
+
+mneme search-callables "plot two line series on the same axes" --package matplotlib --limit 3
+# →  matplotlib.axes._axes.Axes.plot(*args, scalex, scaley, data, **kwargs) -> list[Line2D]
+#    matplotlib.axes._axes.Axes.axvline(x, ymin, ymax, **kwargs) -> Line2D
+#    matplotlib.axes._axes.Axes.axhline(y, xmin, xmax, **kwargs) -> Line2D
+
+mneme search-callables "shade a region between two values" --package matplotlib --limit 3
+# →  matplotlib.axes._axes.Axes.fill_between(x, y1, y2=0, where=None, ...) -> PolyCollection
+#    matplotlib.axes._axes.Axes.fill_betweenx(y, x1, x2=0, where=None, ...) -> PolyCollection
+#    matplotlib.collections.FillBetweenPolyCollection
+```
+
+Each hit is a compact card with the signature, docstring summary, and a `symbol_id` the agent can pass to `get_library_symbol` for the full slice. Using those three hits, an agent can write:
+
+```python
+import yfinance as yf
+import matplotlib.pyplot as plt
+
+prices = yf.download("AAPL", start="2023-01-01", end="2024-06-01",
+                     auto_adjust=True, progress=False)
+close = prices["Close"].squeeze()
+
+sma_fast = close.rolling(20).mean()
+sma_slow = close.rolling(50).mean()
+long_signal = sma_fast > sma_slow
+
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(close.index, close,     label="AAPL close", color="black")
+ax.plot(sma_fast.index, sma_fast, label="SMA(20)",   color="tab:blue")
+ax.plot(sma_slow.index, sma_slow, label="SMA(50)",   color="tab:orange")
+ax.fill_between(close.index, close.min(), close.max(),
+                where=long_signal, alpha=0.08, color="tab:green", label="long")
+ax.set_title("AAPL — 20/50 SMA crossover")
+ax.legend(loc="upper left")
+fig.savefig("aapl_sma.png", dpi=110)
+```
+
+The complete script is in [`examples/sma_strategy.py`](examples/sma_strategy.py). The point: the agent didn't need yfinance's or matplotlib's full docs in its context — just three targeted hits.
 
 ## Why callable-level search?
 
-An agent rarely needs the entire Stripe, GitHub, or Slack API in context. It needs to find callables that match a task:
+An agent rarely needs the entire Stripe, GitHub, or matplotlib API. It needs to find callables that match a task:
 
 - `POST /repos/{owner}/{repo}/issues`
 - `POST /v1/refunds`
-- `matplotlib.pyplot.errorbar`  *(library symbols, coming soon)*
-- `the note I saved about our auth flow`  *(memory, coming soon)*
+- `matplotlib.axes._axes.Axes.errorbar`
+- `the note I saved about our auth flow`
 
-Mneme indexes each callable with a compact agent-facing summary, required inputs, auth metadata, response fields (for HTTP), signatures/docstrings (for library symbols), provenance, and a minimal usage slice. Search returns a small list; the agent then pulls only the slice it actually needs.
+Mneme indexes each callable with a compact agent-facing summary, required inputs, auth metadata, response fields (for HTTP), signatures and docstrings (for library symbols), provenance, and a minimal usage slice. Search returns a small list; the agent then pulls only the slice it actually needs.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  seeds[seeds.txt or seeds.popular.txt] --> crawler
-  url[direct spec URL] --> crawler
-  file[local OpenAPI file] --> normalize
-  guru[APIs.guru] --> normalize
-  pypi[PyPI wheel] --> symbols
-  npmtarball[npm tarball / .d.ts] --> symbols
-  crawler[discover + fetch] --> normalize
-  normalize[normalize operations] --> sqlite[(SQLite + FTS5)]
-  symbols[normalize library symbols] --> sqlite
+  oas[OpenAPI: URL, file, APIs.guru, crawler] --> normalize_oas
+  pkg[Python package or local source]         --> normalize_py
+  dts[.d.ts file]                              --> normalize_ts
+  normalize_oas[normalize operations]   --> sqlite[(SQLite + FTS5)]
+  normalize_py[normalize Python symbols] --> sqlite
+  normalize_ts[normalize JS/TS symbols]  --> sqlite
   notes[agent notes / workspace] --> notesdb[(notes.db)]
-  sqlite --> httpapi[FastAPI search service]
-  sqlite --> mcp[Local MCP server]
+  sqlite  --> httpapi[FastAPI search service]
+  sqlite  --> mcp[Local MCP server]
   notesdb --> mcp
   httpapi --> agent[Agents / clients]
-  mcp --> agent
+  mcp     --> agent
 ```
 
-## What you get today (0.2.0)
+## Features
 
-- Conservative OpenAPI discovery crawler for a domain.
-- Direct ingestion for OpenAPI/Swagger URLs and local files.
-- APIs.guru bulk ingestion for bootstrapping a public corpus.
-- A normalizer that converts each HTTP method/path into a compact operation card.
-- SQLite + FTS5 operation search (no Postgres, no vector DB required).
-- A FastAPI search service for agents.
-- A local MCP server with search, spec retrieval, auth-aware request preparation, and guarded HTTP execution.
-- Docker Compose, systemd, cron, and GitHub Actions examples.
-
-## New in 0.3
-
-- **Agent memory.** A searchable notebook (FTS5-backed) plus an opt-in scoped file workspace for persisting notes, snippets, and small artifacts across MCP sessions. Stored in a separate `notes.db`. See [Memory](#memory-notebook--workspace) below.
-- **Library indexing.** `mneme add-pylib <package>` ingests a Python package's public symbols via `griffe` (static analysis, no execution). `mneme add-jslib --package <name> --file <path>.d.ts` ingests a TypeScript declaration file via tree-sitter. Library symbols are searchable side-by-side with HTTP operations via the unified `search_callables` tool. See [Library indexing](#library-indexing-python--jsts) below.
-
-## What's coming next
-
-- Library indexing from npm tarballs (right now you supply a local `.d.ts` file).
-- Library indexing from PyPI sdists/wheels (right now the package must already be installed or be a local source directory).
-- Hybrid retrieval (BM25 + embeddings) for callable search.
+- **HTTP / OpenAPI**: conservative discovery crawler, direct URL/file ingestion, APIs.guru bulk import, normalized operation cards, auth-aware request preparation, and guarded HTTP execution.
+- **Python library indexing** via [`griffe`](https://mkdocstrings.github.io/griffe/) — static analysis, never executes user code.
+- **JS/TS library indexing** via [`tree-sitter-typescript`](https://github.com/tree-sitter/tree-sitter-typescript) parsing of `.d.ts` files — no Node runtime required.
+- **Unified search** across HTTP operations and library symbols (`search_callables`).
+- **Agent memory**: FTS5-backed notebook + opt-in scoped file workspace, stored in a separate `notes.db`.
+- **Local MCP server** with auth profile redaction and dry-run-by-default HTTP execution.
+- **Self-hostable**: SQLite-only, no Postgres or vector DB required. Docker Compose, systemd, cron, and GitHub Actions examples included.
 
 ## Install
 
-From source while the project is pre-PyPI:
+From PyPI:
+
+```bash
+pip install mneme-server                  # base
+pip install 'mneme-server[mcp]'           # with MCP server
+pip install 'mneme-server[libraries]'     # with Python + JS/TS indexers
+pip install 'mneme-server[mcp,libraries]' # everything
+```
+
+From source:
 
 ```bash
 git clone https://github.com/Joshwani/mneme.git
 cd mneme
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
-# include MCP support when you want the local MCP server
-python -m pip install -e '.[dev,mcp]'
-```
-
-Once on PyPI:
-
-```bash
-pip install mneme-server         # base
-pip install 'mneme-server[mcp]'  # with MCP server
+python -m pip install -e '.[dev,mcp,libraries]'
 ```
 
 ## CLI cheatsheet
@@ -120,13 +158,18 @@ mneme discover example.com --ingest
 mneme crawl-seeds examples/seeds.popular.txt
 mneme ingest-apis-guru --limit 25
 
-# search
-mneme search "create a todo with a due date"
-mneme search "create refund" --method POST --provider-domain api.stripe.com
+# library indexing
+mneme add-pylib httpx                                  # an installed package
+mneme add-pylib mymod --source-dir ./src               # a local source tree
+mneme add-jslib --package axios --file ./axios.d.ts
+mneme list-libraries
 
-# inspect
-mneme stats
-mneme doctor
+# unified search
+mneme search "create a todo with a due date"            # HTTP-only shortcut
+mneme search-callables "create a request"               # all kinds
+mneme search-callables "DataFrame" --language python    # Python lib only
+mneme search-callables "post" --package httpx           # one package
+mneme search-callables "create" --kind pylib_symbol --kind jslib_symbol
 
 # memory: notebook
 mneme notes-add --title "T" --body "B" --tag x
@@ -135,16 +178,12 @@ mneme notes-list
 
 # memory: scoped file workspace (must enable first)
 mneme workspace-enable --scope notes --max-mb 10
-mneme workspace-write --scope notes --path a.md --content "..."
-mneme workspace-ls --scope notes
+mneme workspace-write  --scope notes --path a.md --content "..."
+mneme workspace-ls     --scope notes
 
-# library indexing
-mneme add-pylib httpx                             # an installed package
-mneme add-pylib mymod --source-dir ./src          # a local source tree
-mneme add-jslib --package axios --file ./axios.d.ts
-mneme list-libraries
-mneme search-callables "create a request"
-mneme search-callables "send" --kind pylib_symbol --kind jslib_symbol
+# inspect
+mneme stats
+mneme doctor
 
 # serve / run as MCP
 mneme serve --host 127.0.0.1 --port 8080
@@ -154,16 +193,87 @@ mneme mcp-config --client cursor
 
 All commands accept `--db <path>` to override the per-user default.
 
-## Popular APIs starter pack
+## Library indexing in depth
 
-`examples/seeds.popular.txt` is a curated list of stable, public OpenAPI documents you can ingest in one shot:
+Library symbols (functions, classes, methods, interfaces, type aliases, enums) live in the same SQLite + FTS5 index as HTTP operations. They surface in `search_callables` with `kind="pylib_symbol"` or `kind="jslib_symbol"`.
+
+### Python via `griffe`
 
 ```bash
-mneme crawl-seeds examples/seeds.popular.txt
-mneme stats
+pip install 'mneme-server[pylib]'
+
+mneme add-pylib httpx                          # an installed package
+mneme add-pylib mymod --source-dir ./src       # a local source tree
+mneme search-callables "create a request" --language python
 ```
 
-To suggest an API for the starter pack, open an issue using the **Add a public API to the starter index** template.
+Notes:
+
+- Static analysis only — Mneme never imports or executes user code.
+- The package must be installed in the current Python environment, or `--source-dir` must be provided.
+- Private names (`_foo`, `_Bar`) and dunder names (`__init__`, `__repr__`) are skipped.
+- Class re-exports are deduplicated by canonical path so methods appear once.
+
+### JavaScript / TypeScript via `.d.ts`
+
+```bash
+pip install 'mneme-server[jslib]'
+
+mneme add-jslib --package axios --file ./node_modules/axios/index.d.ts
+mneme add-jslib --package @types/node --file ./node_modules/@types/node/fs.d.ts
+mneme search-callables "axios.create"
+```
+
+Notes:
+
+- `tree-sitter-typescript` parses `.d.ts` files; no Node/npm required at runtime.
+- Currently you supply a local `.d.ts` file (pulling tarballs from the npm registry is on the roadmap).
+- Captured kinds: `function`, `class` (+ its `method`s), `interface`, `type`, `enum`.
+- JSDoc comments immediately preceding a declaration become the docstring.
+
+## Memory: notebook + workspace
+
+Two memory primitives, both stored in a separate `notes.db` so you can back up, sync, or wipe agent memory without touching the API catalog.
+
+### Notebook
+
+A persistent, FTS5-searchable scratch pad — design decisions, gotchas, "here's the call that works."
+
+```bash
+mneme notes-add --title "Stripe refund flow" \
+  --body "POST /v1/refunds needs payment_id, amount. 25h refund window." \
+  --tag stripe --tag payments
+
+mneme notes-search refund
+mneme notes-list --scope finops
+mneme notes-get note_<id>
+mneme notes-update note_<id> --body "New body"
+mneme notes-delete note_<id>
+```
+
+Notes have optional `tags`, an optional free-text `scope` (project name or task ID), and microsecond-resolution timestamps for stable ordering.
+
+### Scoped file workspace (off by default)
+
+A small, opt-in directory the agent can read and write within. **The workspace is OFF until you explicitly enable a scope**, and the agent cannot create new scopes via MCP.
+
+```bash
+mneme workspace-enable --scope notes --max-mb 10
+mneme workspace-write  --scope notes --path daily.md --content "## 2026-05-24"
+mneme workspace-ls     --scope notes
+mneme workspace-read   --scope notes --path daily.md
+mneme workspace-rm     --scope notes --path daily.md
+mneme workspace-disable --scope notes              # keeps files on disk
+mneme workspace-disable --scope notes --remove-files
+```
+
+Safety invariants:
+
+- scopes must match `[a-zA-Z0-9_][a-zA-Z0-9_.\-]{0,63}`;
+- paths cannot escape the scope directory (`..` segments and symlinks are rejected);
+- per-file size limit (1 MiB default);
+- per-scope quota (10 MiB default, configurable via `--max-mb`);
+- the agent cannot enable or disable scopes through MCP — only the human operator can.
 
 ## Local MCP server
 
@@ -184,6 +294,7 @@ get_library_symbol         # full symbol card for a symbol_id
 list_libraries             # list indexed library packages
 
 # OpenAPI / HTTP
+index_openapi_url          # fetch and index one remote OpenAPI spec URL
 search_operations          # HTTP-only operation search
 get_operation              # full normalized operation card
 get_spec_slice             # minimal OpenAPI-style operation slice
@@ -223,11 +334,7 @@ mneme mcp-config --client cursor --auth-config ~/.config/mneme/auth.json
 
 Auth profiles are JSON files mapping a friendly profile name to credentials stored in environment variables. Agents see profile names and redacted previews, never raw secrets.
 
-Default path:
-
-```text
-~/.config/mneme/auth.json
-```
+Default path: `~/.config/mneme/auth.json`.
 
 Example:
 
@@ -242,26 +349,9 @@ Example:
         "type": "bearer",
         "token_env": "GITHUB_TOKEN"
       }
-    },
-    "todo-local": {
-      "provider_domain": "api.example.test",
-      "base_url": "https://api.example.test",
-      "allow_methods": ["GET", "POST"],
-      "auth": {
-        "type": "api_key",
-        "in": "header",
-        "name": "X-API-Key",
-        "value_env": "TODO_API_KEY"
-      }
     }
   }
 }
-```
-
-List profiles without leaking secrets:
-
-```bash
-mneme auth-profiles --auth-config ~/.config/mneme/auth.json
 ```
 
 Prepare a call without sending it:
@@ -269,7 +359,7 @@ Prepare a call without sending it:
 ```bash
 mneme prepare-call op_... \
   --auth-config ~/.config/mneme/auth.json \
-  --auth-profile todo-local \
+  --auth-profile github \
   --json-body '{"title":"ship mcp"}'
 ```
 
@@ -278,7 +368,7 @@ Execute a real call only when explicitly confirmed:
 ```bash
 mneme execute-call op_... \
   --auth-config ~/.config/mneme/auth.json \
-  --auth-profile todo-local \
+  --auth-profile github \
   --json-body '{"title":"ship mcp"}' \
   --send --confirm
 ```
@@ -308,34 +398,7 @@ Guardrails:
 }
 ```
 
-Response:
-
-```json
-{
-  "query": "create a refund for a previous payment",
-  "results": [
-    {
-      "operation_id": "op_...",
-      "score": 1.06,
-      "api_title": "Example Payments API",
-      "provider_domain": "api.example.com",
-      "method": "POST",
-      "path": "/v1/refunds",
-      "summary": "Create a refund",
-      "why_relevant": "Creates a full or partial refund for an existing payment.",
-      "auth_required": true,
-      "required_inputs": ["payment_id", "amount"],
-      "links": {
-        "operation": "/operations/op_...",
-        "spec_slice": "/operations/op_.../spec-slice",
-        "call_template": "/operations/op_.../call-template"
-      }
-    }
-  ]
-}
-```
-
-### Other endpoints
+Other endpoints:
 
 ```text
 GET  /health
@@ -348,130 +411,17 @@ POST /operations/{operation_id}/prepare-call
 POST /operations/{operation_id}/execute-call
 ```
 
-## Library indexing (Python + JS/TS)
-
-Mneme can index callables that aren't HTTP operations. Library symbols (functions, classes, methods, interfaces, type aliases, enums) live in the same SQLite + FTS5 index and surface in `search_callables` results with `kind="pylib_symbol"` or `kind="jslib_symbol"`.
-
-### Python via `griffe`
-
-```bash
-pip install 'mneme-server[pylib]'
-
-# Index an installed package
-mneme add-pylib httpx
-
-# Index a checked-out source tree
-mneme add-pylib mymod --source-dir ./src
-
-mneme list-libraries
-mneme search-callables "create a request" --language python
-```
-
-Implementation notes:
-
-- We use [`griffe`](https://mkdocstrings.github.io/griffe/) for **static analysis** — Mneme never imports or executes user code.
-- The package must be installed in the current Python environment, or a `--source-dir` must be provided.
-- Private names (`_foo`, `_Bar`) and dunder names (`__init__`, `__repr__`) are skipped.
-
-### JavaScript / TypeScript via `.d.ts`
-
-```bash
-pip install 'mneme-server[jslib]'
-
-mneme add-jslib --package axios --file ./node_modules/axios/index.d.ts
-mneme add-jslib --package @types/node --file ./node_modules/@types/node/fs.d.ts
-mneme search-callables "axios.create"
-```
-
-Implementation notes:
-
-- We use `tree-sitter-typescript` to parse `.d.ts` files. No `node`/`npm` is required at runtime.
-- Currently you supply a local `.d.ts` file. Pulling tarballs from npm registry is a follow-up.
-- Captured kinds: `function`, `class` (+ its `method`s), `interface`, `type`, `enum`.
-- JSDoc comments immediately preceding a declaration are captured as the docstring; `@param`/`@returns` tags are preserved in the description but not yet parsed structurally.
-
-### Unified search
-
-`search_callables` returns a mixed list of hits ranked by BM25 with structural bonuses. Each hit has a `kind` field. Common filters:
-
-```bash
-mneme search-callables "create a refund"                         # all kinds
-mneme search-callables "create a refund" --kind http_operation   # HTTP only
-mneme search-callables "axios" --kind jslib_symbol               # JS/TS only
-mneme search-callables "DataFrame" --language python             # Python lib only
-mneme search-callables "post" --package httpx                    # one Python pkg
-```
-
-## Memory: notebook + workspace
-
-Mneme exposes two memory primitives to an agent. Both live in a separate `notes.db` so you can back up, sync, or wipe your agent memory without touching the API catalog.
-
-### Notebook
-
-A persistent, FTS5-searchable scratch pad. The agent (or you) saves short notes — design decisions, gotchas, "here's the call that works." Later, the agent searches its own notebook to recall context.
-
-```bash
-mneme notes-add --title "Stripe refund flow" \
-  --body "POST /v1/refunds needs payment_id, amount. 25h refund window." \
-  --tag stripe --tag payments
-
-mneme notes-search refund
-mneme notes-list --scope finops
-mneme notes-get note_<id>
-mneme notes-update note_<id> --body "New body"
-mneme notes-delete note_<id>
-```
-
-Notes have optional `tags`, an optional `scope` (free-text grouping like a project name or task ID), and microsecond-resolution timestamps for stable ordering.
-
-### Scoped file workspace (off by default)
-
-A small, opt-in directory the agent can read and write within. Useful for snippets, generated config, scratch artifacts that should persist across MCP sessions. **The workspace is OFF until you explicitly enable a scope**, and the agent cannot create new scopes via MCP.
-
-```bash
-mneme workspace-enable --scope notes --max-mb 10
-mneme workspace-write --scope notes --path daily.md --content "## 2026-05-24"
-mneme workspace-ls --scope notes
-mneme workspace-read --scope notes --path daily.md
-mneme workspace-rm --scope notes --path daily.md
-mneme workspace-disable --scope notes              # keeps files on disk
-mneme workspace-disable --scope notes --remove-files
-```
-
-Safety invariants:
-
-- scopes must match `[a-zA-Z0-9_][a-zA-Z0-9_.\-]{0,63}`;
-- paths cannot escape the scope directory (`..` segments and symlinks are rejected);
-- per-file size limit (1 MiB default);
-- per-scope quota (10 MiB default, configurable via `--max-mb`);
-- the agent cannot enable or disable scopes through MCP — only the human operator can.
-
 ## Database location
 
 Mneme picks sensible default paths so commands work without `--db`:
 
-OpenAPI/library index:
+| Use | Resolution order |
+| --- | --- |
+| OpenAPI/library index | `$MNEME_DB` → `$XDG_DATA_HOME/mneme/mneme.db` → `~/.local/share/mneme/mneme.db` → `%LOCALAPPDATA%\mneme\mneme.db` |
+| Notes index | `$MNEME_NOTES_DB` → `$XDG_DATA_HOME/mneme/notes.db` → `~/.local/share/mneme/notes.db` → `%LOCALAPPDATA%\mneme\notes.db` |
+| Workspace root | `$MNEME_WORKSPACE_ROOT` → `$XDG_DATA_HOME/mneme/workspace/` → `~/.local/share/mneme/workspace/` → `%LOCALAPPDATA%\mneme\workspace\` |
 
-1. `$MNEME_DB` if set
-2. `$XDG_DATA_HOME/mneme/mneme.db` if set
-3. `~/.local/share/mneme/mneme.db` on Linux/macOS
-4. `%LOCALAPPDATA%\mneme\mneme.db` on Windows
-
-Notes index (separate file):
-
-1. `$MNEME_NOTES_DB` if set
-2. `$XDG_DATA_HOME/mneme/notes.db` if set
-3. `~/.local/share/mneme/notes.db` on Linux/macOS
-4. `%LOCALAPPDATA%\mneme\notes.db` on Windows
-
-Workspace root (one directory per enabled scope under it):
-
-1. `$MNEME_WORKSPACE_ROOT` if set
-2. `$XDG_DATA_HOME/mneme/workspace/` if set
-3. `~/.local/share/mneme/workspace/` on Linux/macOS
-4. `%LOCALAPPDATA%\mneme\workspace\` on Windows
-
-Override the index path with `--db /path/to/mneme.db` and the notes index with `--notes-db /path/to/notes.db` on memory subcommands.
+Override the index path with `--db /path/to/mneme.db` and the notes DB with `--notes-db /path/to/notes.db` on memory subcommands.
 
 ## Self-host with Docker Compose
 
@@ -501,11 +451,11 @@ docker pull ghcr.io/joshwani/mneme:latest
 
 ## Self-host crawler deployment
 
-For now, the recommended deployment model is bring-your-own-infra:
+The recommended deployment model is bring-your-own-infra:
 
 1. Run the API container or systemd service.
 2. Store the SQLite index on a persistent volume.
-3. Keep a curated `seeds.txt` file of domains and spec URLs.
+3. Keep a curated `seeds.txt` of domains and spec URLs.
 4. Run `mneme crawl-seeds` from cron or another scheduler.
 5. Back up the SQLite file like any other application data.
 
@@ -521,50 +471,32 @@ Run `mneme doctor` first. It prints the resolved DB path, index size, installed 
 
 Common issues:
 
-- **"operation not found" or empty search results.** The index is empty. Run `mneme demo` or `mneme crawl-seeds examples/seeds.popular.txt`.
-- **MCP server fails to start with an ImportError.** The optional MCP extra isn't installed. Run `python -m pip install -e '.[mcp]'` (or `pip install 'mneme-server[mcp]'`).
-- **`mneme mcp-config --client cursor` shows `command: mneme` instead of an absolute path.** The `mneme` binary isn't on PATH in the shell that launches your MCP client. Activate the venv first or edit `command` to the absolute path printed by `which mneme`.
+- **Empty search results.** The index is empty. Run `mneme demo`, `mneme crawl-seeds examples/seeds.popular.txt`, or `mneme add-pylib <pkg>`.
+- **MCP server fails to start with an ImportError.** The optional MCP extra isn't installed. Run `pip install 'mneme-server[mcp]'`.
+- **`mneme mcp-config --client cursor` shows `command: mneme` instead of an absolute path.** The `mneme` binary isn't on `PATH` in the shell that launches your MCP client. Activate the venv first, or edit `command` to the absolute path printed by `which mneme`.
 - **401/403 when executing a call.** Check `mneme auth-profiles --auth-config ~/.config/mneme/auth.json` and confirm the referenced `*_env` environment variable is set in the launching shell.
-- **"host not allowed" errors when executing.** Either widen `allow_methods` / `allowed_hosts` in your profile, or unset/relax `MNEME_HTTP_ALLOW_HOSTS`.
+- **"host not allowed" errors when executing.** Either widen `allow_methods` / `allowed_hosts` in your profile, or relax `MNEME_HTTP_ALLOW_HOSTS`.
 
 ## When to move beyond SQLite
 
-SQLite + FTS5 is enough for the MVP and for private/team indexes. Move to a larger architecture when you need:
+SQLite + FTS5 is enough for the MVP and for private/team indexes. Move to a larger architecture when you need concurrent crawler workers, millions of callables, vector retrieval, public multi-tenant search, owner verification flows, or moderation/takedown flows.
 
-- concurrent crawler workers,
-- millions of callables,
-- vector retrieval,
-- public multi-tenant search,
-- owner verification workflows,
-- moderation/takedown flows,
-- crawl queues and retry policies.
-
-A later hosted architecture could use:
-
-- object storage for raw specs,
-- Postgres for metadata,
-- Tantivy / Meilisearch / OpenSearch for lexical search,
-- pgvector / Qdrant / LanceDB for embeddings,
-- a queue for crawler jobs,
-- a read-only search API for agents.
+A later hosted architecture could use object storage for raw specs, Postgres for metadata, Tantivy / Meilisearch / OpenSearch for lexical search, pgvector / Qdrant / LanceDB for embeddings, a queue for crawler jobs, and a read-only search API for agents.
 
 ## Crawl policy
 
-The MVP is intentionally conservative. It should index intentionally published API descriptions, not private or accidentally exposed internal specs.
-
-Recommended rules for operators:
+The MVP is intentionally conservative. It should index intentionally published API descriptions, not private or accidentally exposed internal specs. Recommended rules for operators:
 
 - crawl only submitted domains, submitted URLs, known public directories, and API discovery endpoints;
 - respect rate limits and robots/policy pages where applicable;
 - do not index specs requiring authentication;
 - store provenance for every spec;
-- provide opt-out or takedown instructions if operating a public index;
-- rank owner-verified specs above community/crawler-discovered specs.
+- provide opt-out or takedown instructions if operating a public index.
 
 ## Development
 
 ```bash
-python -m pip install -e '.[dev,mcp]'
+python -m pip install -e '.[dev,mcp,libraries]'
 ruff check
 ruff format --check
 pytest
@@ -574,15 +506,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details and [CHANGELOG.md](CHANGELOG.
 
 ## Roadmap
 
-- Agent memory: searchable notebook + opt-in scoped file workspace (0.3).
-- Library indexing: Python (via `griffe`) and JS/TS (via `.d.ts`) (0.3).
+- Library indexing from npm tarballs (right now you supply a local `.d.ts`).
+- Library indexing from PyPI sdists/wheels (right now the package must be installed or have a local source).
+- Hybrid retrieval (BM25 + embeddings) for callable search.
 - Owner-verified submissions via DNS TXT or GitHub repo verification.
 - Better RFC 9727 Linkset parsing.
 - Duplicate clustering by callable similarity.
-- Hybrid lexical + embedding retrieval.
 - Reranking with task/callable labels.
 - Callable graph edges for multi-step workflows.
-- Public benchmark: natural-language task to expected callable IDs.
+- Public benchmark: natural-language task → expected callable IDs.
 
 ## License
 
