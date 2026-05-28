@@ -4,12 +4,10 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-27
+
 ### Added
 - MCP tool `index_openapi_url` — fetch and index a remote OpenAPI spec URL (equivalent to `mneme add-spec`).
-
-## [0.3.0] - unreleased
-
-### Added
 - **Library indexing.** Python and JavaScript/TypeScript library symbols can now be indexed alongside HTTP operations and surface in unified search.
   - `mneme add-pylib <package>` — index a Python package's public symbols via `griffe` (pure static analysis, no execution). Either an installed package or a local source directory (via `--source-dir`).
   - `mneme add-jslib --package <name> --file <path>.d.ts` — index a TypeScript declaration file via `tree-sitter-typescript`. Captures functions, classes (and their methods), interfaces, type aliases, and enums.
