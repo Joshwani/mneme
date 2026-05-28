@@ -4,7 +4,12 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
-## [0.3.0] - unreleased
+## [0.4.0] - 2026-05-27
+
+### Changed
+- Rewrote README: removed stale version callouts, consolidated install/CLI/MCP/docs, and cut duplicate sections.
+
+## [0.3.0] - 2026-05-27
 
 ### Added
 - **Library indexing.** Python and JavaScript/TypeScript library symbols can now be indexed alongside HTTP operations and surface in unified search.
@@ -58,6 +63,7 @@ Initial public release (under the prior "OAS Atlas" name).
 - XDG-aware default database path.
 - Docker Compose, systemd, cron, and GitHub Actions deployment examples.
 
-[Unreleased]: https://github.com/Joshwani/mneme/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Joshwani/mneme/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Joshwani/mneme/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Joshwani/mneme/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Joshwani/mneme/releases/tag/v0.2.0
