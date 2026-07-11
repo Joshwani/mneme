@@ -81,13 +81,15 @@ def test_mcp_discovery_metadata_exposes_indexed_catalog(tmp_path):
     assert "catalog_summary" in tools_by_name
     assert "Primary discovery tool" in tools_by_name["search_callables"].description
     assert (
-        tools_by_name["search_operations"].inputSchema["properties"]["query"]["description"]
+        tools_by_name["search_operations"]
+        .inputSchema["properties"]["query"]["description"]
         .lower()
         .startswith("natural-language")
     )
-    assert "Do not invent" in tools_by_name["get_operation"].inputSchema["properties"][
-        "operation_id"
-    ]["description"]
+    assert (
+        "Do not invent"
+        in tools_by_name["get_operation"].inputSchema["properties"]["operation_id"]["description"]
+    )
 
     summary = _unwrap_tool_result(asyncio.run(server.call_tool("catalog_summary", {})))
     assert summary["operations"] == 1
@@ -171,9 +173,7 @@ def test_mcp_http_tools_inject_required_query_api_key(tmp_path, monkeypatch):
         "query_params": {"text": "Denver, Colorado"},
     }
 
-    prepared = _unwrap_tool_result(
-        asyncio.run(server.call_tool("prepare_http_call", arguments))
-    )
+    prepared = _unwrap_tool_result(asyncio.run(server.call_tool("prepare_http_call", arguments)))
     assert prepared["can_execute"] is True
     assert prepared["missing_required"] == []
     assert prepared["query_params"]["apiKey"] == "<redacted>"

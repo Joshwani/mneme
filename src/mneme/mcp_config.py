@@ -27,7 +27,7 @@ CLIENT_NOTES = {
         "If your client does not apply MCP server instructions, add this to your Claude "
         "project instructions:\n"
         '  "Mneme is a searchable catalog. Use search_callables or search_operations '
-        "before deciding an API or library capability is unavailable.\""
+        'before deciding an API or library capability is unavailable."'
     ),
     "continue": (
         "Continue (continue.dev) supports MCP via its config.json or config.yaml.\n"
