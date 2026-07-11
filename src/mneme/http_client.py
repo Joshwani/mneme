@@ -65,15 +65,19 @@ def prepare_operation_call(
     content_type = request_body.get("content_type") if isinstance(request_body, dict) else None
 
     warnings: list[str] = []
-    missing_required = _missing_required_inputs(operation, inputs)
-    if missing_required:
-        warnings.append("missing required inputs: " + ", ".join(missing_required))
-
     if content_type and method not in {"GET", "HEAD"}:
         headers.setdefault("Content-Type", str(content_type))
     headers.setdefault("Accept", "application/json")
 
     warnings.extend(apply_auth_profile(profile, headers=headers, query=query))
+    missing_required = _missing_required_inputs(
+        operation,
+        inputs,
+        effective_query=query,
+        effective_headers=headers,
+    )
+    if missing_required:
+        warnings.append("missing required inputs: " + ", ".join(missing_required))
 
     parsed = urlparse(url)
     if query:
@@ -247,11 +251,17 @@ def _fill_path_params(url: str, path_params: dict[str, Any]) -> str:
     return re.sub(r"\{([^}/?#]+)\}", replace, url)
 
 
-def _missing_required_inputs(operation: dict[str, Any], inputs: CallInputs) -> list[str]:
+def _missing_required_inputs(
+    operation: dict[str, Any],
+    inputs: CallInputs,
+    *,
+    effective_query: dict[str, str] | None = None,
+    effective_headers: dict[str, str] | None = None,
+) -> list[str]:
     missing: list[str] = []
     path_params = inputs.path_params or {}
-    query_params = inputs.query_params or {}
-    headers = inputs.headers or {}
+    query_params = effective_query if effective_query is not None else (inputs.query_params or {})
+    headers = effective_headers if effective_headers is not None else (inputs.headers or {})
     body = inputs.json_body if inputs.json_body is not None else inputs.form_body
 
     for param in operation.get("parameters") or []:
