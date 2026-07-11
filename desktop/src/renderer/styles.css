@@ -1,8 +1,21 @@
 :root {
+  --navy-950: #0b1220;
+  --navy-900: #111a2b;
+  --navy-850: #151f33;
+  --navy-800: #1b273c;
+  --navy-700: #26364d;
+  --slate: #718096;
+  --slate-soft: #9aa5b3;
+  --cream: #f1e5c7;
+  --cream-muted: #c9bfa8;
+  --gold: #c89b52;
+  --gold-light: #e2bd77;
+  --gold-dark: #765a32;
+  --border: #2d3b50;
   font-family:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #e8edf3;
-  background: #0b0f14;
+  color: var(--cream);
+  background: var(--navy-950);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -16,8 +29,11 @@ body {
   min-width: 900px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 70% -20%, rgba(52, 110, 95, 0.12), transparent 38%),
-    #0b0f14;
+    linear-gradient(rgba(200, 155, 82, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 155, 82, 0.025) 1px, transparent 1px),
+    radial-gradient(circle at 72% -16%, rgba(200, 155, 82, 0.14), transparent 38%),
+    var(--navy-950);
+  background-size: 38px 38px, 38px 38px, auto, auto;
 }
 
 button,
@@ -43,8 +59,10 @@ button {
   display: flex;
   flex-direction: column;
   padding: 22px 14px;
-  border-right: 1px solid #202833;
-  background: rgba(12, 17, 23, 0.93);
+  border-right: 1px solid var(--gold-dark);
+  background:
+    linear-gradient(180deg, rgba(200, 155, 82, 0.055), transparent 26%),
+    rgba(15, 23, 38, 0.97);
   -webkit-app-region: drag;
 }
 
@@ -56,16 +74,15 @@ button {
 }
 
 .brand-mark {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 1px solid #4f9a83;
-  border-radius: 10px;
-  color: #a8e1ce;
-  background: linear-gradient(145deg, #17342c, #10231e);
-  font-family: Georgia, serif;
-  font-size: 18px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border: 1px solid var(--gold);
+  border-radius: 11px;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 2px rgba(200, 155, 82, 0.1),
+    0 5px 16px rgba(0, 0, 0, 0.28);
 }
 
 .brand strong,
@@ -902,6 +919,232 @@ nav {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* Byzantine mosaic palette */
+.brand strong,
+.page-header h1 {
+  color: var(--cream);
+}
+
+.brand strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.brand span,
+.server-pill span,
+.page-header p,
+.hero-card p,
+.section-heading span,
+.panel-title span,
+.stat-card span,
+.privacy-note p,
+.operation-copy code,
+.detail-header code,
+.tabs button,
+.state-card,
+.segmented button,
+.source-copy span,
+.credential-copy span,
+.source-meta span,
+.form-hint {
+  color: var(--slate);
+}
+
+.eyebrow,
+.nav-icon,
+.search-bar > span,
+.privacy-note > span,
+.source-symbol,
+.credential-icon,
+.credential-copy code {
+  color: var(--gold);
+}
+
+.nav-item {
+  color: var(--slate-soft);
+}
+
+.nav-item:hover {
+  color: var(--cream);
+  background: rgba(200, 155, 82, 0.07);
+}
+
+.nav-item.active {
+  color: var(--cream);
+  background: linear-gradient(90deg, rgba(200, 155, 82, 0.17), rgba(200, 155, 82, 0.045));
+  box-shadow: inset 2px 0 var(--gold);
+}
+
+.server-pill,
+.stat-card,
+.source-row,
+.credential-row {
+  border-color: var(--border);
+  background: rgba(21, 31, 51, 0.86);
+}
+
+.status-dot.ready {
+  background: var(--gold-light);
+  box-shadow: 0 0 0 4px rgba(226, 189, 119, 0.11);
+}
+
+.button.primary {
+  color: var(--navy-950);
+  border-color: var(--gold);
+  background: var(--gold);
+  box-shadow: 0 4px 14px rgba(200, 155, 82, 0.13);
+}
+
+.button.primary:hover:not(:disabled) {
+  background: var(--gold-light);
+}
+
+.button.secondary {
+  color: var(--cream-muted);
+  border-color: var(--border);
+  background: var(--navy-850);
+}
+
+.button.secondary:hover:not(:disabled) {
+  border-color: var(--gold-dark);
+  background: var(--navy-800);
+}
+
+.hero-card {
+  border-color: rgba(200, 155, 82, 0.35);
+  background:
+    linear-gradient(115deg, rgba(200, 155, 82, 0.14), rgba(21, 31, 51, 0.92)),
+    var(--navy-850);
+  box-shadow: inset 0 1px rgba(241, 229, 199, 0.035);
+}
+
+.health-orb.healthy {
+  color: var(--gold-light);
+  border-color: var(--gold-dark);
+  background: rgba(200, 155, 82, 0.13);
+}
+
+.stat-card strong,
+.privacy-note strong,
+.operation-copy strong,
+.tabs button.active,
+.state-card strong,
+.source-copy strong,
+.credential-copy strong,
+.source-meta strong {
+  color: var(--cream);
+}
+
+.privacy-note {
+  border-color: var(--border);
+  color: var(--cream-muted);
+  background: rgba(21, 31, 51, 0.72);
+}
+
+.search-bar,
+.source-form,
+.form-card,
+.spec-detail {
+  border-color: var(--border);
+  background: rgba(17, 26, 43, 0.9);
+}
+
+.search-bar input,
+.search-bar select,
+.input-action input,
+.form-card input {
+  color: var(--cream);
+}
+
+.form-card select,
+.input-action input,
+.form-card input {
+  border-color: var(--border);
+  color: var(--cream);
+  background: var(--navy-950);
+}
+
+.search-bar select {
+  border-left-color: var(--border);
+  color: var(--cream-muted);
+}
+
+.catalog-layout {
+  border-color: var(--border);
+  background: rgba(15, 23, 38, 0.88);
+}
+
+.results-panel,
+.panel-title,
+.tabs {
+  border-color: var(--border);
+}
+
+.operation-row {
+  border-bottom-color: rgba(45, 59, 80, 0.66);
+}
+
+.operation-row:hover,
+.operation-row.active {
+  background: rgba(200, 155, 82, 0.075);
+}
+
+.operation-row.active {
+  box-shadow: inset 2px 0 var(--gold);
+}
+
+.method {
+  color: var(--gold-light);
+  background: rgba(118, 90, 50, 0.35);
+}
+
+.chevron,
+.icon-button {
+  color: var(--slate);
+}
+
+.tabs button.active {
+  border-bottom-color: var(--gold);
+}
+
+.detail-content pre,
+.spec-documentation pre,
+.prose {
+  color: var(--cream-muted);
+}
+
+.spinner {
+  border-color: var(--navy-700);
+  border-top-color: var(--gold);
+}
+
+.segmented button.active {
+  color: var(--cream);
+  background: rgba(200, 155, 82, 0.15);
+}
+
+.source-symbol,
+.credential-icon {
+  border: 1px solid rgba(200, 155, 82, 0.2);
+  background: rgba(200, 155, 82, 0.1);
+}
+
+.source-link:hover strong {
+  color: var(--gold-light);
+}
+
+.form-card label {
+  color: var(--cream-muted);
+}
+
+.form-card input:focus,
+.input-action input:focus,
+.search-bar:focus-within {
+  border-color: var(--gold-dark);
+  box-shadow: 0 0 0 2px rgba(200, 155, 82, 0.1);
 }
 
 @keyframes spin {

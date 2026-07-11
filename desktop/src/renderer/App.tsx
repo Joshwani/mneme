@@ -4,6 +4,7 @@ import { CatalogScreen } from "./screens/CatalogScreen";
 import { CredentialsScreen } from "./screens/CredentialsScreen";
 import { OverviewScreen } from "./screens/OverviewScreen";
 import { SourcesScreen } from "./screens/SourcesScreen";
+import mnemeIcon from "./assets/mneme-icon.png";
 
 type Screen = "overview" | "catalog" | "sources" | "credentials";
 
@@ -37,7 +38,7 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">M</div>
+          <img className="brand-mark" src={mnemeIcon} alt="" />
           <div>
             <strong>Mneme</strong>
             <span>Desktop companion</span>

@@ -13,6 +13,12 @@ let mainWindow: BrowserWindow | null = null;
 let server: ServerSupervisor | undefined;
 let shutdownStarted = false;
 
+function getIconPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "icon", "icon.png")
+    : path.resolve(__dirname, "../../resources/icon/icon.png");
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1180,
@@ -20,7 +26,8 @@ function createWindow(): BrowserWindow {
     minWidth: 900,
     minHeight: 620,
     title: "Mneme",
-    backgroundColor: "#0d1117",
+    backgroundColor: "#111a2b",
+    icon: getIconPath(),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -57,6 +64,7 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   if (app.isPackaged) updateElectronApp();
+  if (process.platform === "darwin") app.dock?.setIcon(getIconPath());
 
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);

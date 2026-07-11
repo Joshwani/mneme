@@ -12,14 +12,18 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     executableName: "mneme-desktop",
+    icon: path.resolve(__dirname, "resources", "icon", "icon"),
     extraResource: [
       path.resolve(__dirname, "resources", "sidecar"),
+      path.resolve(__dirname, "resources", "icon"),
     ],
     osxSign: {},
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({
+      setupIcon: path.resolve(__dirname, "resources", "icon", "icon.ico"),
+    }),
     new MakerZIP({}, ["darwin"]),
     new MakerDMG({}),
     new MakerDeb({ options: {} }),
