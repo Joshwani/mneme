@@ -163,7 +163,7 @@ Main tools include:
 
 HTTP execution is dry-run by default; real calls require explicit confirmation.
 Search across API and library callables is available through MCP and the CLI.
-The HTTP API currently exposes OpenAPI operation search and execution only.
+The HTTP API also exposes local catalog management for trusted desktop clients.
 
 ### How agents discover indexed capabilities
 
@@ -251,7 +251,36 @@ curl -s -X POST http://127.0.0.1:8080/search \
   -d '{"query":"create a todo","limit":5}'
 ```
 
-Endpoints: `GET /health`, `GET /stats`, `POST /search`, `GET /operations/{id}`, `GET /operations/{id}/spec-slice`, `POST /operations/{id}/prepare-call`, `POST /operations/{id}/execute-call`.
+Core endpoints include:
+
+- Health and diagnostics: `GET /health`, `GET /stats`, `GET /version`,
+  `GET /diagnostics`
+- Catalog management: `GET /specs`, `GET /specs/{id}`,
+  `POST /specs/ingest-url`, `POST /specs/ingest-file`, `POST /specs/discover`,
+  `DELETE /specs/{id}`
+- Operations: `GET /operations`, `POST /search`, `GET /operations/{id}`,
+  `GET /operations/{id}/spec-slice`
+- Calls: `POST /operations/{id}/prepare-call`,
+  `POST /operations/{id}/execute-call`
+- Profile metadata: `GET|POST /auth/profiles` and
+  `GET|PUT|DELETE /auth/profiles/{name}`
+
+List endpoints use `limit` and `offset`. Spec details expose a curated
+documentation projection rather than the stored raw document. Profile
+management accepts environment-variable references only; it never resolves or
+returns credential values, and updates to `auth.json` are atomic.
+
+Management endpoints are disabled unless `MNEME_MANAGEMENT_TOKEN` is set.
+Clients must send the same value in `X-Mneme-Management-Token`. The legacy
+search and execution endpoints remain available without this management token.
+
+## Desktop companion
+
+The Electron desktop app in [`desktop/`](desktop/) manages indexed sources,
+operation docs, auth profiles, and OS-encrypted credentials. It bundles Mneme
+as a supervised local sidecar, so desktop updates update the server and UI
+together. See [`desktop/README.md`](desktop/README.md) for development,
+packaging, signing, and release instructions.
 
 ## Docker
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -162,8 +163,12 @@ class MnemeDB:
         self.path = Path(path)
         if self.path.parent and str(self.path.parent) != ".":
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.path))
+        # FastAPI executes synchronous handlers in worker threads. SQLite is compiled
+        # in serialized mode on supported Python builds, so permit that shared app
+        # connection to be used by those workers.
+        self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        self._write_lock = threading.RLock()
         self.init()
 
     def close(self) -> None:
@@ -183,7 +188,7 @@ class MnemeDB:
     ) -> int:
         operations_list = list(operations)
         spec_id = spec_meta["spec_id"]
-        with self.conn:
+        with self._write_lock, self.conn:
             self.conn.execute("DELETE FROM operations_fts WHERE spec_id = ?", (spec_id,))
             self.conn.execute("DELETE FROM operations WHERE spec_id = ?", (spec_id,))
             self.conn.execute(
@@ -232,7 +237,7 @@ class MnemeDB:
         error: str,
         discovered_via: str | None = None,
     ) -> None:
-        with self.conn:
+        with self._write_lock, self.conn:
             self.conn.execute(
                 """
                 INSERT INTO specs (
@@ -320,6 +325,144 @@ class MnemeDB:
         data["raw_json"] = json_loads_maybe(data.get("raw_json"), {})
         return data
 
+    def list_specs(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: str | None = None,
+        provider_domain: str | None = None,
+        query: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List spec metadata and operation counts without loading raw documents."""
+
+        where: list[str] = []
+        params: list[Any] = []
+        if status:
+            where.append("s.status = ?")
+            params.append(status)
+        if provider_domain:
+            where.append("s.provider_domain = ?")
+            params.append(provider_domain)
+        if query:
+            where.append("(s.title LIKE ? OR s.provider_domain LIKE ? OR s.source_url LIKE ?)")
+            match = f"%{query}%"
+            params.extend((match, match, match))
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        total = int(
+            self.conn.execute(
+                f"SELECT COUNT(*) FROM specs s {where_sql}",  # noqa: S608
+                params,
+            ).fetchone()[0]
+        )
+        rows = self.conn.execute(
+            f"""
+            SELECT s.spec_id, s.source_url, s.title, s.version, s.provider_domain,
+                   s.fetched_at, s.content_hash, s.openapi_version, s.discovered_via,
+                   s.status, s.error, COUNT(o.operation_id) AS operation_count
+            FROM specs s
+            LEFT JOIN operations o ON o.spec_id = s.spec_id
+            {where_sql}
+            GROUP BY s.spec_id
+            ORDER BY s.fetched_at DESC, s.title COLLATE NOCASE, s.spec_id
+            LIMIT ? OFFSET ?
+            """,  # noqa: S608
+            (*params, limit, offset),
+        ).fetchall()
+        return [dict(row) for row in rows], total
+
+    def get_spec_metadata(self, spec_id: str) -> dict[str, Any] | None:
+        """Get spec metadata and count while deliberately excluding raw_json."""
+
+        row = self.conn.execute(
+            """
+            SELECT s.spec_id, s.source_url, s.title, s.version, s.provider_domain,
+                   s.fetched_at, s.content_hash, s.openapi_version, s.discovered_via,
+                   s.status, s.error, COUNT(o.operation_id) AS operation_count
+            FROM specs s
+            LEFT JOIN operations o ON o.spec_id = s.spec_id
+            WHERE s.spec_id = ?
+            GROUP BY s.spec_id
+            """,
+            (spec_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def delete_spec(self, spec_id: str) -> dict[str, int] | None:
+        """Delete a spec and its operation/FTS rows atomically."""
+
+        exists = self.conn.execute("SELECT 1 FROM specs WHERE spec_id = ?", (spec_id,)).fetchone()
+        if exists is None:
+            return None
+        operation_count = int(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM operations WHERE spec_id = ?", (spec_id,)
+            ).fetchone()[0]
+        )
+        fts_count = int(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM operations_fts WHERE spec_id = ?", (spec_id,)
+            ).fetchone()[0]
+        )
+        with self._write_lock, self.conn:
+            self.conn.execute("DELETE FROM operations_fts WHERE spec_id = ?", (spec_id,))
+            self.conn.execute("DELETE FROM operations WHERE spec_id = ?", (spec_id,))
+            self.conn.execute("DELETE FROM specs WHERE spec_id = ?", (spec_id,))
+        return {"operations": operation_count, "fts_rows": fts_count}
+
+    def list_operations(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        spec_id: str | None = None,
+        provider_domain: str | None = None,
+        method: str | None = None,
+        query: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List compact operation cards with optional catalog filters."""
+
+        where: list[str] = []
+        params: list[Any] = []
+        for column, value in (
+            ("spec_id", spec_id),
+            ("provider_domain", provider_domain),
+            ("method", method.upper() if method else None),
+        ):
+            if value:
+                where.append(f"{column} = ?")
+                params.append(value)
+        if query:
+            where.append(
+                "(summary LIKE ? OR description LIKE ? OR path LIKE ? "
+                "OR operation_id_native LIKE ? OR api_title LIKE ?)"
+            )
+            match = f"%{query}%"
+            params.extend((match, match, match, match, match))
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        total = int(
+            self.conn.execute(
+                f"SELECT COUNT(*) FROM operations {where_sql}",  # noqa: S608
+                params,
+            ).fetchone()[0]
+        )
+        rows = self.conn.execute(
+            f"""
+            SELECT operation_id, spec_id, api_title, api_version, provider_domain,
+                   method, path, operation_id_native, summary, description, tags,
+                   source_url, quality_score, fetched_at
+            FROM operations
+            {where_sql}
+            ORDER BY api_title COLLATE NOCASE, path, method, operation_id
+            LIMIT ? OFFSET ?
+            """,  # noqa: S608
+            (*params, limit, offset),
+        ).fetchall()
+        items = [dict(row) for row in rows]
+        for item in items:
+            item["tags"] = json_loads_maybe(item.get("tags"), [])
+        return items, total
+
     def stats(self) -> dict[str, Any]:
         specs = self.conn.execute("SELECT COUNT(*) FROM specs WHERE status = 'ok'").fetchone()[0]
         errors = self.conn.execute("SELECT COUNT(*) FROM specs WHERE status = 'error'").fetchone()[
@@ -393,7 +536,7 @@ class MnemeDB:
     def upsert_library_package(self, *, package: dict[str, Any]) -> None:
         """Insert or replace a library package row."""
 
-        with self.conn:
+        with self._write_lock, self.conn:
             self.conn.execute(
                 """
                 INSERT INTO library_packages (
@@ -431,7 +574,7 @@ class MnemeDB:
         """Replace all indexed symbols for a package atomically. Returns the new count."""
 
         symbols_list = list(symbols)
-        with self.conn:
+        with self._write_lock, self.conn:
             self.conn.execute("DELETE FROM library_symbols_fts WHERE package_id = ?", (package_id,))
             self.conn.execute("DELETE FROM library_symbols WHERE package_id = ?", (package_id,))
             for sym in symbols_list:

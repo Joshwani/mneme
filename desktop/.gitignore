@@ -1,0 +1,7 @@
+node_modules/
+.vite/
+out/
+.sidecar-build/
+.sidecar-venv/
+resources/sidecar/
+*.log

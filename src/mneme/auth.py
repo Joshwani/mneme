@@ -2,12 +2,39 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 DEFAULT_AUTH_CONFIG_PATH = "~/.config/mneme/auth.json"
+_AUTH_CONFIG_LOCK = threading.Lock()
+_PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_SECRET_VALUE_KEYS = {
+    "api_key",
+    "password",
+    "secret",
+    "token",
+    "username",
+    "user",
+    "value",
+}
+_AUTH_METADATA_KEYS = {
+    "type",
+    "in",
+    "name",
+    "scheme",
+    "env",
+    "token_env",
+    "username_env",
+    "password_env",
+    "api_key_env",
+    "value_env",
+    "headers",
+}
 
 
 class AuthConfigError(ValueError):
@@ -141,6 +168,63 @@ def load_auth_profiles(path: str | Path | None = None) -> dict[str, AuthProfile]
 def list_auth_profiles(path: str | Path | None = None) -> dict[str, Any]:
     profiles = load_auth_profiles(path)
     return {"profiles": [profile.safe_dict() for profile in profiles.values()]}
+
+
+def upsert_auth_profile_metadata(
+    name: str,
+    metadata: dict[str, Any],
+    *,
+    path: str | Path | None = None,
+    create_only: bool = False,
+    update_only: bool = False,
+) -> dict[str, Any]:
+    """Create or update non-secret profile metadata using an atomic config write."""
+
+    _validate_profile_name(name)
+    clean = _validate_profile_metadata(metadata)
+    config_path = Path(path).expanduser() if path else default_auth_config_path()
+    with _AUTH_CONFIG_LOCK:
+        document, profiles = _load_auth_document(config_path)
+        if create_only and name in profiles:
+            raise AuthConfigError(f"auth profile already exists: {name}")
+        if update_only and name not in profiles:
+            raise AuthConfigError(f"auth profile not found: {name}")
+        current = profiles.get(name)
+        if current is not None and not isinstance(current, dict):
+            raise AuthConfigError(f"auth profile {name!r} must be an object")
+        merged = dict(current or {})
+        for key, value in clean.items():
+            if value is None:
+                merged.pop(key, None)
+            else:
+                merged[key] = value
+        # Parse before writing so malformed policy metadata can never reach disk.
+        profile = AuthProfile.from_mapping(name, merged)
+        profiles[name] = merged
+        _atomic_write_auth_document(config_path, document)
+    return profile.safe_dict()
+
+
+def delete_auth_profile(
+    name: str,
+    *,
+    path: str | Path | None = None,
+) -> dict[str, Any] | None:
+    """Delete an auth profile atomically, returning only its safe metadata."""
+
+    _validate_profile_name(name)
+    config_path = Path(path).expanduser() if path else default_auth_config_path()
+    with _AUTH_CONFIG_LOCK:
+        document, profiles = _load_auth_document(config_path)
+        raw = profiles.get(name)
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise AuthConfigError(f"auth profile {name!r} must be an object")
+        safe = AuthProfile.from_mapping(name, raw).safe_dict()
+        del profiles[name]
+        _atomic_write_auth_document(config_path, document)
+    return safe
 
 
 def choose_auth_profile(
@@ -345,3 +429,105 @@ def _redact(value: str) -> str:
     if value.lower().startswith("basic "):
         return "Basic <redacted>"
     return "<redacted>"
+
+
+def _validate_profile_name(name: str) -> None:
+    if not _PROFILE_NAME_RE.fullmatch(name):
+        raise AuthConfigError(
+            "profile name must be 1-128 characters using letters, numbers, '.', '_', or '-'"
+        )
+
+
+def _validate_profile_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    unknown = set(metadata) - PROFILE_KEYS
+    if unknown:
+        raise AuthConfigError(f"unsupported auth profile fields: {', '.join(sorted(unknown))}")
+    if "default_headers" in metadata or "default_query" in metadata:
+        raise AuthConfigError(
+            "default header/query values cannot be managed through the metadata API"
+        )
+    auth = metadata.get("auth")
+    if auth is not None:
+        if not isinstance(auth, dict):
+            raise AuthConfigError("auth must be an object")
+        unknown_auth = set(auth) - _AUTH_METADATA_KEYS
+        if unknown_auth:
+            raise AuthConfigError(
+                f"unsupported auth metadata fields: {', '.join(sorted(unknown_auth))}"
+            )
+        forbidden = set(auth) & _SECRET_VALUE_KEYS
+        if forbidden:
+            raise AuthConfigError(
+                f"secret values are not accepted; use environment references: "
+                f"{', '.join(sorted(forbidden))}"
+            )
+        headers = auth.get("headers")
+        if headers is not None:
+            if not isinstance(headers, dict):
+                raise AuthConfigError("auth.headers must be an object")
+            for header_name, ref in headers.items():
+                if not isinstance(header_name, str) or not header_name.strip():
+                    raise AuthConfigError("auth header names must be non-empty strings")
+                if (
+                    not isinstance(ref, dict)
+                    or set(ref) != {"env"}
+                    or not isinstance(ref["env"], str)
+                    or not ref["env"].strip()
+                ):
+                    raise AuthConfigError(
+                        "managed auth headers must use {'env': 'VARIABLE_NAME'} references"
+                    )
+    return dict(metadata)
+
+
+def _load_auth_document(config_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not config_path.exists():
+        document: dict[str, Any] = {"profiles": {}}
+        return document, document["profiles"]
+    try:
+        document = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise AuthConfigError(f"invalid JSON auth config {config_path}: {exc}") from exc
+    if not isinstance(document, dict):
+        raise AuthConfigError(f"auth config must be a JSON object: {config_path}")
+    raw_profiles = document.get("profiles")
+    if raw_profiles is None:
+        # Normalize the legacy top-level profile format on the first managed write.
+        raw_profiles = dict(document)
+        document = {"profiles": raw_profiles}
+    if not isinstance(raw_profiles, dict):
+        raise AuthConfigError("auth config must contain a 'profiles' object")
+    return document, raw_profiles
+
+
+def _atomic_write_auth_document(config_path: Path, document: dict[str, Any]) -> None:
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=config_path.parent,
+            prefix=f".{config_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(document, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        temp_path.chmod(0o600)
+        os.replace(temp_path, config_path)
+        try:
+            directory_fd = os.open(config_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            # Some filesystems do not support syncing directories.
+            pass
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
