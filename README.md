@@ -155,7 +155,7 @@ Main tools include:
 
 - Search and inspection: `search_callables`, `search_operations`,
   `get_operation`, `get_spec_slice`, `get_call_template`,
-  `get_library_symbol`, `list_libraries`
+  `get_library_symbol`, `list_libraries`, `catalog_summary`
 - Authenticated HTTP: `list_local_auth_profiles`, `prepare_http_call`,
   `execute_http_call`
 - Memory: `notes_*`, `workspace_*`
@@ -164,6 +164,30 @@ Main tools include:
 HTTP execution is dry-run by default; real calls require explicit confirmation.
 Search across API and library callables is available through MCP and the CLI.
 The HTTP API currently exposes OpenAPI operation search and execution only.
+
+### How agents discover indexed capabilities
+
+Mneme exposes a compact set of discovery and execution tools through MCP. The
+operations and library symbols selected and indexed by the user intentionally do
+not appear as thousands of individual entries in `tools/list`.
+
+The MCP server provides clients with instructions for this search-first workflow:
+
+1. Use `search_callables` for general capability discovery, or
+   `search_operations` for HTTP-only tasks.
+2. Use `catalog_summary` when exact provider domains, API titles, operation
+   counts, or indexed library names are needed.
+3. Inspect a returned operation ID with `get_operation` or `get_spec_slice`.
+4. Validate HTTP inputs and local authentication with `prepare_http_call`.
+5. Use `execute_http_call` only when execution is requested.
+
+Searches should describe the desired task in natural language. If a narrow
+search returns no results, retry with broader terms and without optional
+provider filters before concluding that the capability is unavailable.
+
+Some MCP clients do not consistently apply server initialization instructions.
+The output of `mneme mcp-config` includes a short client-instruction fallback
+where appropriate.
 
 ## Library indexing
 

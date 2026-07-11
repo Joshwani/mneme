@@ -41,6 +41,69 @@ paths:
 """
 
 
+def _unwrap_tool_result(result):
+    if isinstance(result, tuple):
+        return result[1]
+    return result
+
+
+def test_mcp_discovery_metadata_exposes_indexed_catalog(tmp_path):
+    db_path = tmp_path / "mneme.db"
+    db = MnemeDB(db_path)
+    try:
+        ingest_text(
+            db,
+            GEOAPIFY_SPEC,
+            source_url="https://example.test/geoapify.yaml",
+        )
+        db.upsert_library_package(
+            package={
+                "package_id": "pylib:httpx",
+                "language": "python",
+                "name": "httpx",
+                "version": "1.0",
+                "source": "installed",
+                "fetched_at": "2026-07-11T00:00:00Z",
+            }
+        )
+    finally:
+        db.close()
+
+    server = create_mcp_server(db_path=str(db_path))
+
+    assert "searchable catalog of capabilities selected by the user" in server.instructions
+    assert "1 HTTP operations" in server.instructions
+    assert "api.geoapify.test" in server.instructions
+    assert "search_callables first" in server.instructions
+
+    tools = asyncio.run(server.list_tools())
+    tools_by_name = {tool.name: tool for tool in tools}
+    assert "catalog_summary" in tools_by_name
+    assert "Primary discovery tool" in tools_by_name["search_callables"].description
+    assert (
+        tools_by_name["search_operations"].inputSchema["properties"]["query"]["description"]
+        .lower()
+        .startswith("natural-language")
+    )
+    assert "Do not invent" in tools_by_name["get_operation"].inputSchema["properties"][
+        "operation_id"
+    ]["description"]
+
+    summary = _unwrap_tool_result(asyncio.run(server.call_tool("catalog_summary", {})))
+    assert summary["operations"] == 1
+    assert summary["libraries"] == 1
+    assert summary["indexed_providers"] == [
+        {
+            "provider_domain": "api.geoapify.test",
+            "operation_count": 1,
+            "api_titles": ["Geocoding API"],
+        }
+    ]
+    assert summary["indexed_libraries"] == [
+        {"language": "python", "name": "httpx", "version": "1.0"}
+    ]
+
+
 def test_mcp_http_tools_inject_required_query_api_key(tmp_path, monkeypatch):
     monkeypatch.setenv("GEOAPIFY_API_KEY", "secret-value")
     db_path = tmp_path / "mneme.db"
@@ -108,9 +171,9 @@ def test_mcp_http_tools_inject_required_query_api_key(tmp_path, monkeypatch):
         "query_params": {"text": "Denver, Colorado"},
     }
 
-    prepared = asyncio.run(server.call_tool("prepare_http_call", arguments))
-    if isinstance(prepared, tuple):
-        prepared = prepared[1]
+    prepared = _unwrap_tool_result(
+        asyncio.run(server.call_tool("prepare_http_call", arguments))
+    )
     assert prepared["can_execute"] is True
     assert prepared["missing_required"] == []
     assert prepared["query_params"]["apiKey"] == "<redacted>"
@@ -125,8 +188,7 @@ def test_mcp_http_tools_inject_required_query_api_key(tmp_path, monkeypatch):
             },
         )
     )
-    if isinstance(executed, tuple):
-        executed = executed[1]
+    executed = _unwrap_tool_result(executed)
     assert parse_qs(urlparse(captured["url"]).query)["apiKey"] == ["secret-value"]
     assert executed["request"]["query_params"]["apiKey"] == "<redacted>"
     assert executed["response"]["status_code"] == 200

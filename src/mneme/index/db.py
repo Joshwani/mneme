@@ -349,6 +349,47 @@ class MnemeDB:
             "library_symbols_by_language": by_language,
         }
 
+    def catalog_summary(self) -> dict[str, Any]:
+        """Return a compact inventory of the capabilities in this index."""
+
+        provider_rows = self.conn.execute(
+            """
+            SELECT provider_domain, api_title, COUNT(*) AS operation_count
+            FROM operations
+            WHERE provider_domain IS NOT NULL
+            GROUP BY provider_domain, api_title
+            ORDER BY provider_domain, api_title
+            """
+        )
+        providers_by_domain: dict[str, dict[str, Any]] = {}
+        for row in provider_rows:
+            domain = str(row["provider_domain"])
+            provider = providers_by_domain.setdefault(
+                domain,
+                {
+                    "provider_domain": domain,
+                    "operation_count": 0,
+                    "api_titles": [],
+                },
+            )
+            provider["operation_count"] += int(row["operation_count"])
+            if row["api_title"]:
+                provider["api_titles"].append(str(row["api_title"]))
+
+        libraries = [
+            {
+                "language": package["language"],
+                "name": package["name"],
+                "version": package["version"],
+            }
+            for package in self.list_library_packages()
+        ]
+        return {
+            **self.stats(),
+            "indexed_providers": list(providers_by_domain.values()),
+            "indexed_libraries": libraries,
+        }
+
     def upsert_library_package(self, *, package: dict[str, Any]) -> None:
         """Insert or replace a library package row."""
 
