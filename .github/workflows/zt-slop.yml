@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # v0.2.1
-      - uses: Joshwani/zt-slop@ce7867ecbe64868743da527c4078986c7834a6cb
+      # v0.2.2
+      - uses: Joshwani/zt-slop@d7fe4fe778dcbc78760aa92c4b6fe6cebf82914e
         with:
           fail-on: block
