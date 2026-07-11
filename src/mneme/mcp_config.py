@@ -23,7 +23,11 @@ CLIENT_NOTES = {
         "Claude Desktop reads MCP servers from:\n"
         "  - macOS:   ~/Library/Application Support/Claude/claude_desktop_config.json\n"
         "  - Windows: %APPDATA%/Claude/claude_desktop_config.json\n"
-        "Merge the snippet below into the top-level `mcpServers` object."
+        "Merge the snippet below into the top-level `mcpServers` object.\n"
+        "If your client does not apply MCP server instructions, add this to your Claude "
+        "project instructions:\n"
+        '  "Mneme is a searchable catalog. Use search_callables or search_operations '
+        'before deciding an API or library capability is unavailable."'
     ),
     "continue": (
         "Continue (continue.dev) supports MCP via its config.json or config.yaml.\n"
@@ -32,7 +36,9 @@ CLIENT_NOTES = {
     ),
     "generic": (
         "Generic stdio MCP client config. Place the snippet wherever your client\n"
-        "expects an `mcpServers` map."
+        "expects an `mcpServers` map. If the client ignores MCP server instructions,\n"
+        "tell its agent to use Mneme's search_callables or search_operations tool before\n"
+        "deciding a capability is unavailable."
     ),
 }
 

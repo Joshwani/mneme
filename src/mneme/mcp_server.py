@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 from mneme.auth import list_auth_profiles, load_auth_profiles
 from mneme.http_client import CallInputs, execute_operation_call, prepare_operation_call
@@ -30,6 +32,66 @@ from mneme.memory.workspace import (
     write_workspace as _write_workspace,
 )
 
+SearchQuery = Annotated[
+    str,
+    Field(
+        description=(
+            "Natural-language description of the capability needed. Describe the task rather "
+            "than guessing an endpoint or symbol name."
+        )
+    ),
+]
+OperationID = Annotated[
+    str,
+    Field(
+        description=(
+            "Opaque operation_id returned by search_operations or an http_operation result from "
+            "search_callables. Do not invent this value."
+        )
+    ),
+]
+ProviderDomain = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Optional exact provider domain from catalog_summary, such as api.github.com. "
+            "Omit this filter when unsure."
+        )
+    ),
+]
+
+
+def _build_server_instructions(db_path: str) -> str:
+    db = MnemeDB(db_path)
+    try:
+        summary = db.catalog_summary()
+    finally:
+        db.close()
+
+    provider_domains = [
+        provider["provider_domain"] for provider in summary["indexed_providers"][:12]
+    ]
+    provider_preview = ", ".join(provider_domains) or "none"
+    if len(summary["indexed_providers"]) > len(provider_domains):
+        provider_preview += ", ..."
+
+    return f"""Mneme is a local searchable catalog of capabilities selected by the user.
+The visible MCP tools are discovery and execution tools, not the full capability set.
+
+Current catalog snapshot: {summary["operations"]} HTTP operations across
+{summary["providers"]} providers and {summary["library_symbols"]} library symbols across
+{summary["libraries"]} packages. Indexed provider domains: {provider_preview}.
+
+For any task that may be served by an API or library, call search_callables first. For an
+HTTP-only task, call search_operations. Use catalog_summary when you need the exact inventory.
+Search with a natural-language task description. If a search returns no results, retry with
+broader terms and without optional filters before concluding the capability is unavailable.
+
+For HTTP calls, use the returned operation_id with get_operation or get_spec_slice, then call
+prepare_http_call. Only call execute_http_call when execution is requested. It defaults to a
+dry run; a real request requires dry_run=false and confirm=true. Credentials are injected from
+local auth profiles, remain redacted, and must not be requested from the user or passed directly."""
+
 
 def create_mcp_server(
     db_path: str | None = None,
@@ -50,7 +112,11 @@ def create_mcp_server(
     db_path = db_path or default_db_path()
     auth_config = auth_config or os.environ.get("MNEME_AUTH_CONFIG")
     notes_db_path = notes_db_path or default_notes_db_path()
-    mcp = FastMCP("Mneme", json_response=True)
+    mcp = FastMCP(
+        "Mneme",
+        instructions=_build_server_instructions(db_path),
+        json_response=True,
+    )
 
     def get_operation_or_error(operation_id: str) -> dict[str, Any]:
         db = MnemeDB(db_path)
@@ -64,18 +130,20 @@ def create_mcp_server(
 
     @mcp.tool()
     def search_operations(
-        query: str,
+        query: SearchQuery,
         limit: int = 10,
-        provider_domain: str | None = None,
+        provider_domain: ProviderDomain = None,
         method: str | None = None,
         auth_required: bool | None = None,
         token_budget: int | None = 4000,
     ) -> dict[str, Any]:
-        """Search indexed OpenAPI operations for a natural-language task.
+        """Discover HTTP capabilities in the user's indexed API catalog.
 
-        Use this first when you need to find an API operation. Results include
-        operation_id values that can be passed to get_operation, get_spec_slice,
-        prepare_http_call, or execute_http_call.
+        This is the primary HTTP discovery tool; indexed operations do not appear
+        individually in tools/list. Search by task, then use a returned operation_id
+        with get_operation, get_spec_slice, prepare_http_call, or execute_http_call.
+        Retry with broader terms and no provider filter before deciding an operation
+        is unavailable.
         """
 
         db = MnemeDB(db_path)
@@ -95,20 +163,20 @@ def create_mcp_server(
             db.close()
 
     @mcp.tool()
-    def get_operation(operation_id: str) -> dict[str, Any]:
-        """Return the normalized operation card for an operation_id."""
+    def get_operation(operation_id: OperationID) -> dict[str, Any]:
+        """Inspect an operation found by search_operations or search_callables."""
 
         return get_operation_or_error(operation_id)
 
     @mcp.tool()
-    def get_spec_slice(operation_id: str) -> dict[str, Any]:
-        """Return the minimal OpenAPI-style slice needed to understand one operation."""
+    def get_spec_slice(operation_id: OperationID) -> dict[str, Any]:
+        """Return the minimal OpenAPI-style slice for an operation found through search."""
 
         return get_operation_or_error(operation_id).get("spec_slice") or {}
 
     @mcp.tool()
-    def get_call_template(operation_id: str) -> dict[str, Any]:
-        """Return a non-executing call template for one operation."""
+    def get_call_template(operation_id: OperationID) -> dict[str, Any]:
+        """Return a non-executing call template for an operation found through search."""
 
         from mneme.call_template import build_call_template
 
@@ -127,7 +195,7 @@ def create_mcp_server(
 
     @mcp.tool()
     def prepare_http_call(
-        operation_id: str,
+        operation_id: OperationID,
         auth_profile: str | None = None,
         path_params: dict[str, Any] | None = None,
         query_params: dict[str, Any] | None = None,
@@ -138,8 +206,9 @@ def create_mcp_server(
     ) -> dict[str, Any]:
         """Prepare a redacted HTTP request for an indexed operation without sending it.
 
-        Use this to check the resolved URL, missing required inputs, selected auth
-        profile, and request body before making a real call.
+        The operation_id must come from search_operations or search_callables. Use this
+        after inspecting the operation to check the resolved URL, missing required
+        inputs, selected auth profile, and request body before making a real call.
         """
 
         op = get_operation_or_error(operation_id)
@@ -160,7 +229,7 @@ def create_mcp_server(
 
     @mcp.tool()
     def execute_http_call(
-        operation_id: str,
+        operation_id: OperationID,
         auth_profile: str | None = None,
         path_params: dict[str, Any] | None = None,
         query_params: dict[str, Any] | None = None,
@@ -174,10 +243,10 @@ def create_mcp_server(
     ) -> dict[str, Any]:
         """Execute an indexed operation using local credentials.
 
-        Defaults to dry_run=true, which returns a redacted prepared request and sends
-        no network traffic. To perform a real request, set dry_run=false and
-        confirm=true. Secrets are injected locally from the selected auth profile and
-        never returned in tool output.
+        The operation_id must come from search_operations or search_callables. Defaults
+        to dry_run=true, which returns a redacted prepared request and sends no network
+        traffic. To perform a real request, set dry_run=false and confirm=true. Secrets
+        are injected locally from the selected auth profile and never returned.
         """
 
         op = get_operation_or_error(operation_id)
@@ -201,21 +270,23 @@ def create_mcp_server(
 
     @mcp.tool()
     def search_callables(
-        query: str,
+        query: SearchQuery,
         limit: int = 10,
         kinds: list[str] | None = None,
-        provider_domain: str | None = None,
+        provider_domain: ProviderDomain = None,
         method: str | None = None,
         auth_required: bool | None = None,
         language: str | None = None,
         package_name: str | None = None,
         token_budget: int | None = 4000,
     ) -> dict[str, Any]:
-        """Unified search across HTTP operations and library symbols.
+        """Primary discovery tool for all capabilities selected and indexed by the user.
 
-        Returns a mixed list ranked by BM25. Each hit has a ``kind`` field of
-        'http_operation', 'pylib_symbol', or 'jslib_symbol'. Use ``kinds`` to
-        restrict to a subset. For HTTP-only behavior, use search_operations.
+        Indexed operations and symbols do not appear individually in tools/list. This
+        searches the full catalog and returns mixed results ranked by relevance. Each
+        hit has a ``kind`` of 'http_operation', 'pylib_symbol', or 'jslib_symbol'.
+        Use ``kinds`` to restrict the search; for HTTP-only discovery, use
+        search_operations. Retry more broadly before concluding a capability is absent.
         """
 
         kind_tuple: tuple[str, ...] | None = None
@@ -267,8 +338,23 @@ def create_mcp_server(
             db.close()
 
     @mcp.tool()
+    def catalog_summary() -> dict[str, Any]:
+        """List the user's indexed providers, API titles, operation counts, and libraries.
+
+        Use this to understand the exact capability inventory before searching. The
+        provider_domain values returned here can be passed as exact filters to
+        search_operations or search_callables.
+        """
+
+        db = MnemeDB(db_path)
+        try:
+            return db.catalog_summary()
+        finally:
+            db.close()
+
+    @mcp.tool()
     def mneme_stats() -> dict[str, Any]:
-        """Return index statistics for this local Mneme database."""
+        """Return aggregate index diagnostics; use catalog_summary for capability names."""
 
         db = MnemeDB(db_path)
         try:
