@@ -6,11 +6,29 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GHCR](https://img.shields.io/badge/ghcr.io-joshwani%2Fmneme-2b5797)](https://github.com/Joshwani/mneme/pkgs/container/mneme)
 
-**A self-hosted catalog of callables and persistent memory for AI agents.**
+**A local tool catalog, credential-aware HTTP gateway, and persistent memory for AI agents.**
 
-Mneme is a local-first indexer and search service. An LLM agent uses it to find the right HTTP API operation, library symbol, or saved note — then pull a minimal slice instead of loading entire docs into context.
+Mneme gives coding agents one local interface to search OpenAPI operations and
+Python or JavaScript/TypeScript library symbols, retrieve only the context they
+need, and safely prepare or execute authenticated HTTP calls. Auth profiles,
+indexes, notes, and workspace files stay on your machine.
 
 Published on PyPI as [`mneme-server`](https://pypi.org/project/mneme-server/); the CLI is `mneme`.
+Mneme is currently alpha software.
+
+### What Mneme is — and is not
+
+- **Local callable search:** SQLite + FTS5 indexes for OpenAPI operations and
+  statically analyzed library symbols.
+- **Local auth policy:** reusable profiles resolve environment-backed credentials
+  locally while agents receive redacted previews.
+- **Guarded HTTP execution:** host and method allowlists, dry runs by default,
+  and explicit confirmation for real requests.
+- **Agent memory:** a separate searchable notebook and opt-in scoped workspace.
+
+Mneme indexes sources you explicitly ingest. It is not an MCP tool registry and
+does not automatically discover arbitrary tools, CLI commands, or MCP server
+definitions in a project.
 
 ## Quickstart
 
@@ -31,16 +49,17 @@ The default index lives in a per-user directory (XDG-aware), so later commands w
 
 ## What gets indexed
 
-Mneme searches **callables** — individual things an agent can invoke or recall:
+Mneme searches **callables** — individual things an agent can invoke:
 
 | Kind | Example |
 |------|---------|
 | HTTP operation | `POST /v1/refunds` |
 | Python symbol | `httpx.Client.get` |
 | JS/TS symbol | `axios.create` |
-| Agent note | a saved scratch-pad entry |
 
-All kinds share one SQLite + FTS5 index and one MCP search tool (`search_callables`).
+These callable kinds share `mneme.db` and the MCP tool `search_callables`.
+Agent notes are intentionally separate: they live in `notes.db` and use
+`notes_search`.
 
 ```mermaid
 flowchart LR
@@ -56,6 +75,22 @@ flowchart LR
   mcp --> agent[Agent]
   httpapi --> agent
 ```
+
+## Agent workflow
+
+```mermaid
+flowchart LR
+  ingest[Discover or ingest a spec] --> search[Search callables]
+  search --> inspect[Get operation or minimal spec slice]
+  inspect --> prepare[Prepare redacted request]
+  prepare --> confirm{Confirm real call?}
+  confirm -->|yes| execute[Inject local credentials and execute]
+  confirm -->|no| preview[Keep dry-run preview]
+```
+
+The same MCP server exposes library lookup, notes, and workspace tools, so an
+agent can move from discovery to action without loading full API specifications
+or secret values into model context.
 
 ## Install
 
@@ -105,7 +140,8 @@ Use `--db <path>` to override the default index path.
 
 ## MCP server
 
-Mneme runs locally over stdio (or streamable HTTP). Credentials and notes stay on your machine.
+Mneme runs locally over stdio by default and also supports streamable HTTP and
+SSE transports.
 
 ```bash
 pip install 'mneme-server[mcp]'
@@ -115,7 +151,19 @@ mneme mcp-config --client claude      # Claude Desktop
 mneme mcp-config --client continue    # Continue.dev
 ```
 
-Main tools: `search_callables`, `get_operation`, `get_library_symbol`, `prepare_http_call`, `execute_http_call`, `notes_*`, `workspace_*`, `mneme_stats`. HTTP execution is dry-run by default; real calls require explicit confirmation.
+Main tools include:
+
+- Search and inspection: `search_callables`, `search_operations`,
+  `get_operation`, `get_spec_slice`, `get_call_template`,
+  `get_library_symbol`, `list_libraries`
+- Authenticated HTTP: `list_local_auth_profiles`, `prepare_http_call`,
+  `execute_http_call`
+- Memory: `notes_*`, `workspace_*`
+- Diagnostics: `mneme_stats`
+
+HTTP execution is dry-run by default; real calls require explicit confirmation.
+Search across API and library callables is available through MCP and the CLI.
+The HTTP API currently exposes OpenAPI operation search and execution only.
 
 ## Library indexing
 
@@ -143,7 +191,10 @@ Two opt-in primitives in a separate `notes.db`:
 
 ## Auth profiles
 
-Store credentials in env vars, reference them by profile name. Agents see redacted previews, not secrets.
+Auth profiles centralize provider URLs, allowed hosts and methods, and references
+to credentials stored in environment variables. Mneme can select a profile by
+the operation's provider domain. Agents can list profiles and inspect prepared
+requests, but secret values are redacted.
 
 ```json
 {
@@ -158,7 +209,8 @@ Store credentials in env vars, reference them by profile name. Agents see redact
 }
 ```
 
-Default path: `~/.config/mneme/auth.json`. See `examples/auth.json` for a fuller example.
+Default path: `~/.config/mneme/auth.json`. Override it with
+`MNEME_AUTH_CONFIG`. See `examples/auth.example.json` for a fuller example.
 
 ```bash
 mneme auth-profiles
@@ -193,7 +245,7 @@ See `deploy/` for systemd, cron, and compose examples.
 | API/library index | `MNEME_DB` | `~/.local/share/mneme/mneme.db` |
 | Notes index | `MNEME_NOTES_DB` | `~/.local/share/mneme/notes.db` |
 | Workspace root | `MNEME_WORKSPACE_ROOT` | `~/.local/share/mneme/workspace/` |
-| Auth config | — | `~/.config/mneme/auth.json` |
+| Auth config | `MNEME_AUTH_CONFIG` | `~/.config/mneme/auth.json` |
 
 ## Troubleshooting
 
