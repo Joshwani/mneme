@@ -1,0 +1,26 @@
+name: zt-slop
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # v0.2.1
+      - uses: Joshwani/zt-slop@ce7867ecbe64868743da527c4078986c7834a6cb
+        with:
+          fail-on: block
